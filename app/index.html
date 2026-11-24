@@ -359,7 +359,7 @@ table.daytbl .fillbox .s { font-family: var(--font-ui); }
   const fmtPct = (v, d = 2) => (v > 0 ? '+' : '') + v.toFixed(d) + '%';
   const cls = (v) => (v > 0 ? 'up' : v < 0 ? 'down' : '');
   const parseDate = d3.utcParse('%Y-%m-%d');
-  const fmtT = (t) => String(+(+t).toPrecision(12)); // T는 소수점 제한 없음(부동소수 꼬리만 정리)
+  const fmtT = (t) => String(+(+t).toFixed(4)); // 화면 표시는 4자리까지. 계산·저장은 원래 값 그대로
   const signedT = (v) => (v > 0 ? '+' : v < 0 ? '−' : '±') + fmtT(Math.abs(v));
   const fmtDay = d3.utcFormat('%Y-%m-%d');
 

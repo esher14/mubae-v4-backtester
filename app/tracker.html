@@ -350,7 +350,7 @@ details[open] > summary { margin-bottom: 10px; }
   const fmtMoney = (v) => (v < 0 ? '-$' : '$') + d3.format(',.0f')(Math.abs(v));
   const fmtMoney2 = (v) => (v < 0 ? '-$' : '$') + d3.format(',.2f')(Math.abs(v));
   const fmtPct = (v, d = 2) => (v > 0 ? '+' : '') + v.toFixed(d) + '%';
-  const fmtT = (t) => String(+(+t).toPrecision(12)); // T는 소수점 제한 없음(부동소수 꼬리만 정리)
+  const fmtT = (t) => String(+(+t).toFixed(4)); // 화면 표시는 4자리까지. 계산·저장은 원래 값 그대로
   const signedT = (v) => (v > 0 ? '+' : v < 0 ? '−' : '±') + fmtT(Math.abs(v));
   const cls = (v) => (v > 0 ? 'up' : v < 0 ? 'down' : '');
   const signed = (v, d = 2) => (v > 0 ? '+' : v < 0 ? '−' : '±') + Math.abs(v).toFixed(d);
@@ -539,6 +539,7 @@ details[open] > summary { margin-bottom: 10px; }
     const holding = st.shares > 0;
     // 모드·T
     const d = kpi(el, '모드 · T', holding ? fmtT(st.T) : '대기', null);
+    if (holding) d.querySelector('.v').title = `T 원래 값: ${st.T}`;
     const chip = document.createElement('span');
     chip.className = 'chip ' + (!holding ? 'idle' : st.mode === 'REVERSE' ? 'reverse' : 'normal');
     chip.textContent = !holding ? '첫 매수 대기' : st.mode === 'REVERSE' ? (st.revFirst ? '리버스 · 1일차' : '리버스') : st.T < n / 2 ? '일반 · 전반전' : '일반 · 후반전';
