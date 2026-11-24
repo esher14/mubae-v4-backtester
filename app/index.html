@@ -132,6 +132,12 @@ tr.sub ul { margin: 2px 0; padding-left: 1.1em; }
 .chart.cd { min-height: 260px; } .chart.tt { min-height: 120px; }
 .xbtn { font: inherit; font-size: 12.5px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 7px; padding: 4px 10px; cursor: pointer; }
 .navbtns { display: flex; gap: 6px; }
+.titlerow { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.dl { display: flex; flex-direction: column; gap: 3px; }
+.dl small { font-size: 11.5px; color: var(--muted); }
+.wrap.collapsed { grid-template-columns: minmax(0, 1fr); }
+.wrap.collapsed .side { display: none; }
+.openbtn { align-self: flex-start; margin-bottom: 6px; }
 </style>
 
 </head>
@@ -140,7 +146,10 @@ tr.sub ul { margin: 2px 0; padding-left: 1.1em; }
   <aside class="side">
     <form class="panel" id="form" autocomplete="off">
       <div class="head">
-        <h1>무매 V4 백테스터</h1>
+        <div class="titlerow">
+          <h1>무매 V4 백테스터</h1>
+          <button type="button" class="xbtn" id="side-close" aria-label="조건 패널 접기" title="조건 패널 접기">« 접기</button>
+        </div>
         <p class="muted" style="font-size:12.5px">라오어 무한매수법 V4.0 규칙으로 일봉 백테스트를 돌립니다. 값을 바꾸면 바로 다시 계산됩니다.</p>
       </div>
       <label class="field"><span>종목</span>
@@ -155,11 +164,12 @@ tr.sub ul { margin: 2px 0; padding-left: 1.1em; }
         </label>
       </div>
       <div class="field"><span>추적 기간</span>
-        <div class="row2">
-          <input class="num" id="f-start" type="date" value="2015-01-02" aria-label="시작일">
-          <input class="num" id="f-end" type="date" aria-label="종료일 (비우면 데이터 끝까지)">
-        </div>
-        <small>왼쪽 시작일, 오른쪽 종료일. 종료일을 비우면 데이터 끝까지.</small>
+        <label class="dl"><small>시작일</small>
+          <input class="num" id="f-start" type="date" value="2015-01-02">
+        </label>
+        <label class="dl"><small>종료일 (비우면 데이터 끝까지)</small>
+          <input class="num" id="f-end" type="date">
+        </label>
       </div>
       <label class="field"><span>원금 $</span>
         <input class="num" id="f-principal" type="number" min="100" step="100" value="20000" inputmode="numeric">
@@ -183,6 +193,7 @@ tr.sub ul { margin: 2px 0; padding-left: 1.1em; }
 
   <main class="main">
     <section class="head" id="summary-head">
+      <button type="button" class="xbtn openbtn" id="side-open" hidden aria-label="조건 패널 열기">» 조건 열기</button>
       <h2 id="run-title">—</h2>
       <p class="muted num" id="run-period" style="font-size:12.5px">—</p>
     </section>
@@ -218,13 +229,13 @@ tr.sub ul { margin: 2px 0; padding-left: 1.1em; }
         <div class="toggles">
           <button type="button" class="tg" id="t-log" aria-pressed="true">로그 축</button>
           <button type="button" class="tg" id="t-hold" aria-pressed="true"><span id="t-hold-lbl">종목</span> 보유</button>
-          <button type="button" class="tg" id="t-qqq" aria-pressed="true">QQQ 보유</button>
+          <button type="button" class="tg" id="t-qqq" aria-pressed="true"><span id="t-bench-lbl">QQQ</span> 보유</button>
         </div>
       </div>
       <div class="legend">
         <span><i class="sw"></i>무매 평가금</span>
         <span id="lg-hold"><i class="sw hold"></i><span id="lg-hold-lbl">종목</span> 단순 보유</span>
-        <span id="lg-qqq"><i class="sw qqq"></i>QQQ 단순 보유</span>
+        <span id="lg-qqq"><i class="sw qqq"></i><span id="lg-bench-lbl">QQQ</span> 단순 보유(기초지수)</span>
         <span><i class="dot up"></i>사이클 종료(수익)</span>
         <span><i class="dot down"></i>사이클 종료(손실)</span>
         <span><i class="sw rev"></i>리버스 모드 구간</span>
@@ -324,6 +335,7 @@ tr.sub ul { margin: 2px 0; padding-left: 1.1em; }
   const E = window.MubaeEngine;
   const $ = (id) => document.getElementById(id);
   const S = { bars: {}, result: null, view: { log: true, hold: true, qqq: true, period: 'since', cdOnly: false }, cd: null };
+  const BENCH = { TQQQ: 'QQQ', SOXL: 'SOXX' }; // 3배 레버리지 종목의 기초지수 ETF
   const STORE_KEY = 'mubae-backtester-inputs-v1';
   const fmtMoney = (v) => (v < 0 ? '-$' : '$') + d3.format(',.0f')(Math.abs(v));
   const fmtMoney2 = (v) => (v < 0 ? '-$' : '$') + d3.format(',.2f')(Math.abs(v));
@@ -401,9 +413,11 @@ tr.sub ul { margin: 2px 0; padding-left: 1.1em; }
     saveForm(c);
     r.hold = holdByDate(bars, r.daily, r.cfg.principal);
     let qbars = null;
-    try { qbars = await loadBars('QQQ'); } catch (e) { qbars = null; }
+    const bt = BENCH[c.ticker] || 'QQQ';
+    try { qbars = await loadBars(bt); } catch (e) { qbars = null; }
     if (seq !== runSeq) return;
     r.qqq = qbars ? holdByDate(qbars, r.daily, r.cfg.principal) : null;
+    r.benchTicker = bt;
     r.dataLast = last;
     S.result = r;
     S.cd = null;
@@ -561,6 +575,8 @@ tr.sub ul { margin: 2px 0; padding-left: 1.1em; }
     $('t-hold-lbl').textContent = tk; $('lg-hold-lbl').textContent = tk;
     $('lg-hold').hidden = !showHold;
     $('lg-qqq').hidden = !showQqq;
+    const bt = r.benchTicker || 'QQQ';
+    $('t-bench-lbl').textContent = bt; $('lg-bench-lbl').textContent = bt;
     renderCompare();
     const elE = $('chart-eq'), elD = $('chart-dd');
     elE.replaceChildren(); elD.replaceChildren();
@@ -654,7 +670,7 @@ tr.sub ul { margin: 2px 0; padding-left: 1.1em; }
       const p0 = r.cfg.principal;
       const rows = [['무매 평가금', `${fmtMoney(d.equity)} (${fmtPct((d.equity / p0 - 1) * 100, 1)})`], ['무매 낙폭', (d.dd * 100).toFixed(2) + '%']];
       if (showHold) rows.push([`${tk} 보유`, `${fmtMoney(hold[i])} (${fmtPct((hold[i] / p0 - 1) * 100, 1)})`], [`${tk} 낙폭`, holdDd[i].toFixed(2) + '%']);
-      if (showQqq) rows.push(['QQQ 보유', `${fmtMoney(qqq[i])} (${fmtPct((qqq[i] / p0 - 1) * 100, 1)})`], ['QQQ 낙폭', qqqDd[i].toFixed(2) + '%']);
+      if (showQqq) rows.push([`${bt} 보유`, `${fmtMoney(qqq[i])} (${fmtPct((qqq[i] / p0 - 1) * 100, 1)})`], [`${bt} 낙폭`, qqqDd[i].toFixed(2) + '%']);
       rows.push([`${tk} 종가`, fmtMoney2(d.close)], ['모드 · T', `${d.mode === 'REVERSE' ? '리버스' : '일반'} · ${d.T.toFixed(3)}`], ['보유', `${d.shares.toLocaleString()}주`]);
       for (const [k, v] of rows) { const rr = tip.append('div').attr('class', 'r'); rr.append('span').text(k); rr.append('b').text(v); }
       const ev = d.events.slice();
@@ -678,7 +694,7 @@ tr.sub ul { margin: 2px 0; padding-left: 1.1em; }
     tb.replaceChildren();
     const rows = [['무한매수법', r.daily.map((d) => d.equity)]];
     if (r.hold) rows.push([`${s.ticker} 단순 보유`, r.hold]);
-    if (r.qqq) rows.push(['QQQ 단순 보유', r.qqq]);
+    if (r.qqq) rows.push([`${r.benchTicker} 단순 보유 (기초지수)`, r.qqq]);
     for (const [name, eq] of rows) {
       const st = seriesStats(eq, s.principal, s.years);
       const tr = tb.insertRow();
@@ -985,6 +1001,17 @@ tr.sub ul { margin: 2px 0; padding-left: 1.1em; }
   $('t-log').addEventListener('click', () => { S.view.log = !S.view.log; renderCharts(); });
   $('t-hold').addEventListener('click', () => { S.view.hold = !S.view.hold; renderCharts(); });
   $('t-qqq').addEventListener('click', () => { S.view.qqq = !S.view.qqq; renderCharts(); });
+  // 조건 패널 접기/열기 (이 브라우저에 상태 기억)
+  const SIDE_KEY = 'mubae-backtester-side-collapsed';
+  function setCollapsed(on, focus) {
+    document.querySelector('.wrap').classList.toggle('collapsed', on);
+    $('side-open').hidden = !on;
+    try { localStorage.setItem(SIDE_KEY, on ? '1' : '0'); } catch (e) {}
+    if (focus) (on ? $('side-open') : $('side-close')).focus();
+  }
+  $('side-close').addEventListener('click', () => setCollapsed(true, true));
+  $('side-open').addEventListener('click', () => setCollapsed(false, true));
+  try { if (localStorage.getItem(SIDE_KEY) === '1') setCollapsed(true, false); } catch (e) {}
   $('cd-close').addEventListener('click', closeCycle);
   $('cd-prev').addEventListener('click', () => stepCycle(-1));
   $('cd-next').addEventListener('click', () => stepCycle(1));
