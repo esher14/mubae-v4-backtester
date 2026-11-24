@@ -1,0 +1,41 @@
+<!doctype html><html><head><meta charset="utf-8"><title>기록장 계산 검증</title></head>
+<!-- 기록장(tracker-core.js)에 백테스트 엔진의 체결을 그대로 기록하면 엔진과 같은 T·보유·평단·잔금·모드가 나오는지 확인.
+     저장소 루트에서 python -m http.server 후 브라우저로 /test_tracker.html 을 열면 결과가 표시된다(mismatches=0 이어야 함). --><body><pre id="out"></pre>
+<script src="app/engine.js"></script><script src="app/tracker-core.js"></script>
+<script>
+(async function () {
+  const E = MubaeEngine, TK = MubaeTracker, out = (t) => { document.getElementById('out').textContent += t + '\n'; };
+  try {
+    const cases = [
+      { ticker: 'TQQQ', n: 20, target: null, principal: 20000, start: '2015-01-02', end: '2018-06-30', feeRate: 0 },
+      { ticker: 'SOXL', n: 40, target: null, principal: 50000, start: '2020-01-02', end: '2023-06-30', feeRate: 0.001 },
+      { ticker: 'TQQQ', n: 30, target: 12, principal: 30000, start: '2021-06-01', end: '2024-12-31', feeRate: 0.0007 },
+    ];
+    for (const c of cases) {
+      const bars = E.parseCSV(await (await fetch(`app/data/${c.ticker}.csv`)).text());
+      const r = E.run(c, bars);
+      const tr = { ticker: c.ticker, n: c.n, target: c.target, feeRate: c.feeRate * 100,
+        start: { begin: r.daily[0].date, cash: c.principal, shares: 0, avg: 0, T: 0, mode: 'NORMAL' }, records: [] };
+      const barMap = new Map(bars.map((b) => [b.date, b]));
+      // 하루씩: 현재 상태에서 주문을 만들고 자동 판정 체결을 기록으로 추가
+      let rp = TK.replay(tr, bars.filter((b) => b.date <= r.daily[0].date));
+      let bad = 0, firstBad = null;
+      for (let i = 0; i < r.daily.length; i++) {
+        const d = r.daily[i], b = barMap.get(d.date);
+        const st = rp.nextState;
+        const o = rp.nextOrders;
+        const fills = TK.autoJudge(o, st, b.close, b.high, c.feeRate);
+        tr.records.push({ date: d.date, close: b.close, fills });
+        const nx = r.daily[i + 1] ? r.daily[i + 1].date : d.date; rp = TK.replay(tr, bars.filter((x) => x.date <= nx));
+        const a = rp.state;
+        const ok = Math.abs(a.T - d.T) < 1e-9 && a.shares === d.shares && Math.abs(a.avg - d.avg) < 1e-6 && Math.abs(a.cash - d.cash) < 1e-6 && a.mode === d.mode;
+        if (!ok) { bad++; if (!firstBad) firstBad = `${d.date} tracker T=${a.T} sh=${a.shares} avg=${a.avg} cash=${a.cash} ${a.mode} | engine T=${d.T} sh=${d.shares} avg=${d.avg} cash=${d.cash} ${d.mode}`; }
+      }
+      out(`${c.ticker} n${c.n} ${c.start}~${c.end}: days=${r.daily.length} cycles engine=${r.cycles.length} tracker=${rp.cycles.length} mismatches=${bad}${firstBad ? ' first: ' + firstBad : ''}`);
+    }
+    // 중간 진입 T 추정 예시
+    out('estimateT(20, 15000, 100, 50) = ' + TK.estimateT(20, 15000, 100, 50));
+    out('DONE');
+  } catch (e) { out('ERR ' + e.stack); }
+})();
+</script></body></html>
