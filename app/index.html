@@ -307,7 +307,7 @@ table.daytbl .fillbox .s { font-family: var(--font-ui); }
       <p class="hint">굵은 값은 그날 매매를 마친 뒤의 값이고, 아래 작은 글씨는 전날 대비 변화와 보조 정보입니다. 행을 누르면 그날 걸었던 주문표(전날 장 마감 기준)를 펼쳐 봅니다.</p>
       <div class="tablewrap tall">
         <table class="daytbl">
-          <thead><tr><th class="l">날짜</th><th>종가</th><th class="l">모드</th><th>T</th><th>기준가</th><th class="l">체결</th><th>실현손익</th><th>보유(주)</th><th>평단</th><th>잔금</th><th>사이클 손익</th></tr></thead>
+          <thead><tr><th class="l">날짜</th><th>종가</th><th class="l">모드</th><th>T</th><th>기준가</th><th class="l">체결</th><th>실현손익</th><th>보유(주)</th><th>평단</th><th>잔금</th><th>누적 실현손익</th></tr></thead>
           <tbody id="cd-body"></tbody>
         </table>
       </div>
@@ -932,9 +932,11 @@ table.daytbl .fillbox .s { font-family: var(--font-ui); }
     const tb = $('cd-body');
     tb.replaceChildren();
     $('cd-only').setAttribute('aria-pressed', S.view.cdOnly);
+    let cumRz = 0;
     days.forEach((d, i) => {
       const hasFill = d.fills.length > 0;
       const pc = i > 0 ? days[i - 1].close : prevClose;
+      cumRz += d.fills.reduce((a, f) => a + f.pnl, 0);
       if (S.view.cdOnly && !hasFill && !d.cycleEnd) return;
       const tr = tb.insertRow();
       tr.className = 'click';
@@ -996,9 +998,9 @@ table.daytbl .fillbox .s { font-family: var(--font-ui); }
       const dc = d.cash - d.cashBefore;
       cell2(tr, fmtMoney(d.cash), Math.abs(dc) >= 0.5 ? signedMoney(dc) : '');
 
-      const cyEq = d.cash + d.shares * d.close;
-      const cr = (cyEq / c.startCapital - 1) * 100;
-      cell2(tr, fmtPct(cr), fmtMoney(cyEq), '', cls(cr));
+      const cr = (cumRz / c.startCapital) * 100;
+      if (Math.abs(cumRz) < 0.005) cell2(tr, '—', '', '', 'muted');
+      else cell2(tr, fmtPct(cr), fmtMoney2(cumRz), '', cls(cr));
 
       const toggle = () => {
         const nx = tr.nextElementSibling;
