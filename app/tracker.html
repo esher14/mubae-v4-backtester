@@ -324,6 +324,7 @@ details[open] > summary { margin-bottom: 10px; }
           <label class="field"><span>이름</span><input id="c-name"></label>
           <label class="field"><span>목표수익률 %</span><input id="c-target" class="num" type="number" step="0.1"></label>
           <label class="field"><span>수수료 % (편도)</span><input id="c-fee" class="num" type="number" step="0.01" min="0"></label>
+          <label class="field" id="c-T-wrap" hidden><span>진입 시점 T</span><input id="c-T" class="num" type="number" step="0.00001" min="0" inputmode="decimal"><small>바꾸면 이후 기록이 모두 다시 계산됩니다</small></label>
         </div>
         <p class="hint" style="margin-top:8px" id="c-info"></p>
         <div class="actions" style="margin-top:10px">
@@ -444,7 +445,7 @@ details[open] > summary { margin-bottom: 10px; }
     const n = +$('s-n').value || 20, cash = +$('m-cash').value || 0, sh = +$('m-shares').value || 0, avg = +$('m-avg').value || 0;
     const est = TK.estimateT(n, cash, sh, avg);
     $('m-T').placeholder = sh && avg ? String(est) : '';
-    $('m-T-hint').textContent = sh && avg ? `비우면 추정값 ${est} 사용(n × 매입금 ÷ (매입금 + 잔금)). 쿼터매도 이력이 있으면 실제와 다를 수 있으니 쓰던 시트의 T가 있으면 그 값을 넣으세요.` : '보유 수량과 평단을 넣으면 추정값을 보여줍니다';
+    $('m-T-hint').textContent = sh && avg ? `쓰던 시트의 T를 그대로 넣으세요. 비우면 매입금 비율로 어림한 ${est}을 씁니다. 실제 T는 매수 회차 수로 쌓이고(주 단위 내림으로 1회 매수금보다 적게 사도 +1) 매도 때 0.75배·0.25배로 바뀌므로 어림값과 꽤 다를 수 있습니다.` : '쓰던 시트의 T를 넣으세요. 보유 수량과 평단을 넣으면 어림값도 보여줍니다';
     const t = $('s-ticker').value;
     $('s-target').placeholder = String(E.DEFAULT_TARGET[t] ?? 15);
   }
@@ -1020,6 +1021,8 @@ details[open] > summary { margin-bottom: 10px; }
   function renderSettings(tr) {
     $('c-name').value = tr.name; $('c-target').value = tr.target ?? ''; $('c-target').placeholder = String(E.DEFAULT_TARGET[tr.ticker] ?? 15); $('c-fee').value = tr.feeRate || 0;
     const s = tr.start;
+    $('c-T-wrap').hidden = s.kind !== 'mid';
+    $('c-T').value = s.kind === 'mid' ? s.T : '';
     $('c-info').textContent = s.kind === 'mid'
       ? `중간 진입 · ${s.asOf} 장 마감 기준 잔금 ${fmtMoney2(s.cash)}, ${s.shares}주 @${fmtMoney2(s.avg)}, T ${fmtT(s.T)}, ${s.mode === 'REVERSE' ? '리버스' : '일반'} 모드`
       : `새로 시작 · 원금 ${fmtMoney2(s.cash)}, 첫 매수일 ${s.begin}`;
@@ -1029,6 +1032,7 @@ details[open] > summary { margin-bottom: 10px; }
     tr.name = $('c-name').value.trim() || tr.name;
     tr.target = $('c-target').value === '' ? null : +$('c-target').value;
     tr.feeRate = +$('c-fee').value || 0;
+    if (tr.start.kind === 'mid' && $('c-T').value !== '' && +$('c-T').value >= 0) tr.start.T = +$('c-T').value;
     save(); toast('설정을 저장했습니다'); refresh(false);
   });
   $('c-delete').addEventListener('click', () => {
