@@ -8,8 +8,8 @@
   try {
     const cases = [
       { ticker: 'TQQQ', n: 20, target: null, principal: 20000, start: '2015-01-02', end: '2018-06-30', feeRate: 0 },
-      { ticker: 'SOXL', n: 40, target: null, principal: 50000, start: '2020-01-02', end: '2023-06-30', feeRate: 0.001 },
-      { ticker: 'TQQQ', n: 30, target: 12, principal: 30000, start: '2021-06-01', end: '2024-12-31', feeRate: 0.0007 },
+      { ticker: 'SOXL', n: 40, target: null, principal: 50000, start: '2020-01-02', end: '2023-06-30', feeRate: 0 },
+      { ticker: 'TQQQ', n: 30, target: 12, principal: 30000, start: '2021-06-01', end: '2024-12-31', feeRate: 0 },
     ];
     for (const c of cases) {
       const bars = E.parseCSV(await (await fetch(`app/data/${c.ticker}.csv`)).text());
@@ -33,7 +33,15 @@
       }
       out(`${c.ticker} n${c.n} ${c.start}~${c.end}: days=${r.daily.length} cycles engine=${r.cycles.length} tracker=${rp.cycles.length} mismatches=${bad}${firstBad ? ' first: ' + firstBad : ''}`);
     }
-    // 중간 진입 T 추정 예시
+    // 증권사 방식 수수료(사용자 시트 2026-09-01~02 사례): 평단은 수수료 제외, 잔금은 정산금액
+    out('fee 3010 buy = ' + TK.dayFee(3010, 'buy', 0.0007, 0.0000206) + ' (기대 2.1)');
+    out('fee 2170.40 buy = ' + TK.dayFee(2170.40, 'buy', 0.0007, 0.0000206) + ' (기대 1.51)');
+    out('fee 1000 sell = ' + TK.dayFee(1000, 'sell', 0.0007, 0.0000206) + ' (기대 0.73)');
+    const cfgF = TK.cfgOf({ ticker: 'TQQQ', n: 20, target: null, feeRate: 0.07, secRate: 0.00206 });
+    const stF = { cash: 13969.41, shares: 0, avg: 0, T: 0, mode: 'NORMAL', revFirst: false };
+    const oF = E.makeOrders(stF, cfgF, 0.01, 105, stF.cash);
+    TK.applyDay(stF, oF, [{ role: 'first', qty: 14, price: 107.30 }, { role: 'manualBuy', qty: 14, price: 107.70 }], 105.91, cfgF);
+    out(`after 09-01: shares=${stF.shares} avg=${stF.avg.toFixed(4)} cash=${stF.cash.toFixed(2)} (기대 28, 107.5000, 10957.31)`);    // 중간 진입 T 추정 예시
     out('estimateT(20, 15000, 100, 50) = ' + TK.estimateT(20, 15000, 100, 50));
     out('DONE');
   } catch (e) { out('ERR ' + e.stack); }

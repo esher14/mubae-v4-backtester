@@ -179,7 +179,11 @@ details[open] > summary { margin-bottom: 10px; }
         <label class="field"><span>종목</span><select id="s-ticker"><option>TQQQ</option><option>SOXL</option></select></label>
         <label class="field"><span>분할수</span><input id="s-n" class="num" type="number" min="2" step="1" value="20" inputmode="numeric"></label>
         <label class="field"><span>목표수익률 %</span><input id="s-target" class="num" type="number" step="0.1" inputmode="decimal"></label>
-        <label class="field"><span>수수료 % (편도)</span><input id="s-fee" class="num" type="number" step="0.01" min="0" value="0" inputmode="decimal"><small>평단·잔금 계산에 반영</small></label>
+        <label class="field"><span>수수료율 %</span><input id="s-fee" class="num" type="number" step="any" min="0" value="0.07" inputmode="decimal"></label>
+        <label class="field"><span>매도 제세금 %</span><input id="s-sec" class="num" type="number" step="any" min="0" value="0.00206" inputmode="decimal"><small>미국 SEC fee 등</small></label>
+      </div>
+      <p class="hint" style="margin-top:6px">그날 매수·매도 체결금액 합계에 적용. 수수료는 센트 미만 버림, 제세금은 매도에만 센트 미만 올림. 평단에는 넣지 않고 잔금에만 반영. 증권사마다 다르니 내 계좌 기준으로 맞추세요.</p>
+      <div>
       </div>
       <div class="field" style="margin-top:14px;max-width:360px"><span>시작 방식</span>
         <div class="seg" role="radiogroup" aria-label="시작 방식">
@@ -256,6 +260,11 @@ details[open] > summary { margin-bottom: 10px; }
           </table>
         </div>
         <div><button type="button" class="xbtn sm" id="r-add">+ 기타 체결 추가</button> <span class="hint">규칙 밖 매매(직접 매수·매도). T는 바뀌지 않습니다.</span></div>
+        <div class="formrow">
+          <label class="field"><span>매수 수수료 $</span><input id="r-fee-buy" class="num" type="number" step="0.01" min="0" inputmode="decimal"></label>
+          <label class="field"><span>매도 수수료·제세금 $</span><input id="r-fee-sell" class="num" type="number" step="0.01" min="0" inputmode="decimal"></label>
+          <p class="hint" style="flex:1 1 200px;margin-bottom:4px">비워 두면 설정한 요율로 계산한 값(칸 안 회색 숫자)을 씁니다. 증권사 체결 내역과 다르면 실제 금액을 넣으세요.</p>
+        </div>
         <label class="field"><span>메모</span><input id="r-note" placeholder="선택"></label>
         <p class="hint" id="r-msg" style="color:var(--up)"></p>
         <div class="actions">
@@ -270,7 +279,7 @@ details[open] > summary { margin-bottom: 10px; }
       <div class="cardhead"><h2>날짜별 기록</h2><span class="hint">굵은 값은 그날 매매 후, 작은 글씨는 변화량</span></div>
       <div class="tablewrap tall">
         <table class="daytbl">
-          <thead><tr><th class="l">날짜</th><th>종가</th><th class="l">체결</th><th>T</th><th>보유(주)</th><th>평단</th><th>잔금</th><th>실현손익</th><th>평가금</th><th></th></tr></thead>
+          <thead><tr><th class="l">날짜</th><th>종가</th><th class="l">체결</th><th>T</th><th>보유(주)</th><th>평단</th><th>잔금</th><th>실현손익(세후)</th><th>평가금</th><th></th></tr></thead>
           <tbody id="d-body"></tbody>
         </table>
       </div>
@@ -323,7 +332,8 @@ details[open] > summary { margin-bottom: 10px; }
         <div class="grid" style="margin-top:10px">
           <label class="field"><span>이름</span><input id="c-name"></label>
           <label class="field"><span>목표수익률 %</span><input id="c-target" class="num" type="number" step="0.1"></label>
-          <label class="field"><span>수수료 % (편도)</span><input id="c-fee" class="num" type="number" step="0.01" min="0"></label>
+          <label class="field"><span>수수료율 %</span><input id="c-fee" class="num" type="number" step="any" min="0"></label>
+          <label class="field"><span>매도 제세금 %</span><input id="c-sec" class="num" type="number" step="any" min="0"></label>
           <label class="field" id="c-T-wrap" hidden><span>진입 시점 T</span><input id="c-T" class="num" type="number" step="any" min="0" inputmode="decimal"><small>바꾸면 이후 기록이 모두 다시 계산됩니다</small></label>
         </div>
         <p class="hint" style="margin-top:8px" id="c-info"></p>
@@ -463,7 +473,7 @@ details[open] > summary { margin-bottom: 10px; }
     if (!(n >= 2)) return msg('분할수는 2 이상이어야 합니다.');
     const target = $('s-target').value === '' ? null : +$('s-target').value;
     if (target != null && !(target > 0)) return msg('목표수익률을 확인하세요.');
-    const fee = +$('s-fee').value || 0;
+    const fee = +$('s-fee').value || 0, sec = +$('s-sec').value || 0;
     const name = $('s-name').value.trim() || $('s-name').placeholder || ticker;
     let start;
     if (kindVal() === 'fresh') {
@@ -482,7 +492,7 @@ details[open] > summary { margin-bottom: 10px; }
       try { const bs = await bars(ticker); const nb = bs.find((b) => b.date > asOf); if (nb) begin = nb.date; } catch (e) { /* 다음 평일 */ }
       start = { kind: 'mid', asOf, begin, cash, shares, avg, T, mode, revFirst: mode === 'REVERSE' && !$('m-revdone').checked };
     }
-    const tr = { id: uid(), name, ticker, n, target, feeRate: fee, created: new Date().toISOString(), start, records: [] };
+    const tr = { id: uid(), name, ticker, n, target, feeRate: fee, secRate: sec, created: new Date().toISOString(), start, records: [] };
     DB.trackers.push(tr);
     save();
     $('setup-form').reset(); updSetup();
@@ -511,7 +521,7 @@ details[open] > summary { margin-bottom: 10px; }
     $('v-title').textContent = tr.name;
     const sub = $('v-sub'); sub.replaceChildren();
     const sbi = (k, v) => { const s = document.createElement('span'); s.append(k + ' '); const b = document.createElement('b'); b.textContent = v; s.append(b); sub.append(s); };
-    sbi('종목', tr.ticker); sbi('분할', n + '분할'); sbi('목표', tgt + '%'); sbi('수수료', (+tr.feeRate || 0) + '%');
+    sbi('종목', tr.ticker); sbi('분할', n + '분할'); sbi('목표', tgt + '%'); sbi('수수료', `${+tr.feeRate || 0}% · 매도 제세금 ${+tr.secRate || 0}%`);
     sbi('시작', tr.start.kind === 'mid' ? `${tr.start.asOf} 중간 진입` : `${tr.start.begin}`);
     sbi('마지막 기록', rp.lastDone || '없음');
     renderKpis(tr, rp);
@@ -626,6 +636,8 @@ details[open] > summary { margin-bottom: 10px; }
     $('r-close').value = rec && rec.close ? rec.close : bar ? bar.close : '';
     $('r-high').value = bar ? bar.high : '';
     $('r-note').value = rec ? rec.note || '' : '';
+    $('r-fee-buy').value = rec && rec.feeBuy != null ? rec.feeBuy : '';
+    $('r-fee-sell').value = rec && rec.feeSell != null ? rec.feeSell : '';
     $('r-msg').textContent = '';
     const lastRec = tr.records.length ? tr.records.map((r) => r.date).sort().slice(-1)[0] : null;
     $('r-src').textContent = (bar ? `${date} 종가·고가는 가격 데이터에서 채웠습니다.` : `${date} 가격 데이터가 아직 없습니다(평일 아침 8시 무렵 갱신). 종가를 직접 넣어 주세요.`)
@@ -651,7 +663,22 @@ details[open] > summary { margin-bottom: 10px; }
       addRow(tb, r.role, r.plan, got.length > 0, got.length ? q : r.planQty ?? '', price);
     }
     for (const f of (fills || []).filter((x) => x.role === 'manualBuy' || x.role === 'manualSell')) addManual(f.role, f.qty, f.price);
+    updFeeEst();
   }
+  function updFeeEst() {
+    if (!S.form || !S.form.rows) return;
+    const cfg = TK.cfgOf(curTr());
+    let b = 0, s2 = 0;
+    for (const r of S.form.rows) {
+      if (!r.cb.checked) continue;
+      const g = (Math.floor(+r.qIn.value) || 0) * (+r.pIn.value || 0);
+      if (R[r.role()].side === 'buy') b += g; else s2 += g;
+    }
+    $('r-fee-buy').placeholder = TK.dayFee(b, 'buy', cfg.rate, cfg.sec).toFixed(2);
+    $('r-fee-sell').placeholder = TK.dayFee(s2, 'sell', cfg.rate, cfg.sec).toFixed(2);
+  }
+  $('r-rows').addEventListener('input', updFeeEst);
+  $('r-rows').addEventListener('change', updFeeEst);
   function addRow(tb, role, plan, on, qty, price) {
     const meta = R[role];
     const tr = tb.insertRow();
@@ -685,7 +712,7 @@ details[open] > summary { margin-bottom: 10px; }
     const cb = { checked: true };
     const row = { role: () => sel.value, cb, qIn, pIn, tr, loc: false };
     sel.addEventListener('change', () => { tr.className = 'on ' + R[sel.value].side; });
-    del.addEventListener('click', () => { tr.remove(); S.form.rows = S.form.rows.filter((x) => x !== row); });
+    del.addEventListener('click', () => { tr.remove(); S.form.rows = S.form.rows.filter((x) => x !== row); updFeeEst(); });
     S.form.rows.push(row);
   }
   $('r-add').addEventListener('click', () => { if (S.form) addManual('manualBuy', '', $('r-close').value || ''); });
@@ -702,6 +729,7 @@ details[open] > summary { margin-bottom: 10px; }
     if (!S.form) return;
     const C = $('r-close').value;
     for (const r of S.form.rows) if (r.loc && !r.role().startsWith('manual')) r.pIn.value = C;
+    updFeeEst();
   });
   $('r-date').addEventListener('change', () => {
     const tr = curTr(), d = $('r-date').value;
@@ -726,7 +754,12 @@ details[open] > summary { margin-bottom: 10px; }
         fills.push({ role: r.role(), qty: q, price: p });
       }
     }
-    return { rec: { date, close, fills, note: $('r-note').value.trim() } };
+    const fv = (id) => ($(id).value === '' ? null : Math.max(0, +$(id).value));
+    const rec = { date, close, fills, note: $('r-note').value.trim() };
+    const fb = fv('r-fee-buy'), fs = fv('r-fee-sell');
+    if (fb != null && !noFills) rec.feeBuy = fb;
+    if (fs != null && !noFills) rec.feeSell = fs;
+    return { rec };
   }
   function saveRecord(noFills) {
     const tr = curTr(); if (!tr || !S.form) return;
@@ -790,7 +823,9 @@ details[open] > summary { margin-bottom: 10px; }
       const dc = a.cash - b.cash;
       cell2(row, fmtMoney(a.cash), Math.abs(dc) >= 0.5 ? signedMoney(dc) : '');
       const sold = d.fills.some((f) => R[f.role].side === 'sell');
-      cell2(row, sold ? fmtMoney2(d.realized) : '—', sold ? `누적 ${fmtMoney(d.cumRealized)}` : '', '', sold ? cls(d.realized) : 'muted');
+      const fee = (d.feeBuy || 0) + (d.feeSell || 0);
+      const showR = sold || fee > 0;
+      cell2(row, showR ? fmtMoney2(d.realized) : '—', fee > 0 ? `수수료 ${fmtMoney2(fee)}${d.feeManual ? ' (직접)' : ''}` + (sold ? ` · 누적 ${fmtMoney(d.cumRealized)}` : '') : sold ? `누적 ${fmtMoney(d.cumRealized)}` : '', '', showR ? cls(d.realized) : 'muted');
       cell2(row, d.equity != null ? fmtMoney(d.equity) : '—', '');
       const tdA = row.insertCell(); tdA.className = 'l';
       if (d.recorded) {
@@ -1021,7 +1056,7 @@ details[open] > summary { margin-bottom: 10px; }
 
   // ---------- 설정 ----------
   function renderSettings(tr) {
-    $('c-name').value = tr.name; $('c-target').value = tr.target ?? ''; $('c-target').placeholder = String(E.DEFAULT_TARGET[tr.ticker] ?? 15); $('c-fee').value = tr.feeRate || 0;
+    $('c-name').value = tr.name; $('c-target').value = tr.target ?? ''; $('c-target').placeholder = String(E.DEFAULT_TARGET[tr.ticker] ?? 15); $('c-fee').value = tr.feeRate || 0; $('c-sec').value = tr.secRate || 0;
     const s = tr.start;
     $('c-T-wrap').hidden = s.kind !== 'mid';
     $('c-T').value = s.kind === 'mid' ? s.T : '';
@@ -1034,6 +1069,7 @@ details[open] > summary { margin-bottom: 10px; }
     tr.name = $('c-name').value.trim() || tr.name;
     tr.target = $('c-target').value === '' ? null : +$('c-target').value;
     tr.feeRate = +$('c-fee').value || 0;
+    tr.secRate = +$('c-sec').value || 0;
     if (tr.start.kind === 'mid' && $('c-T').value !== '' && +$('c-T').value >= 0) tr.start.T = +$('c-T').value;
     save(); toast('설정을 저장했습니다'); refresh(false);
   });

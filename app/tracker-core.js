@@ -22,7 +22,18 @@
   const SELL_ORDER = ['limitSell', 'mocSell', 'quarterSell', 'revSell', 'manualSell'];
 
   function cfgOf(tr) {
-    return { ticker: tr.ticker, n: +tr.n, target: tr.target === '' || tr.target == null ? null : +tr.target, feeRate: (+tr.feeRate || 0) / 100 };
+    const rate = (+tr.feeRate || 0) / 100, sec = (+tr.secRate || 0) / 100;
+    // feeRate: 엔진 비교·자동 판정의 잔금 한도용 근사치(편도 비율)
+    return { ticker: tr.ticker, n: +tr.n, target: tr.target === '' || tr.target == null ? null : +tr.target, feeRate: rate, rate, sec };
+  }
+
+  // 증권사 방식 수수료: 그날 매수(또는 매도) 체결금액 합계에 수수료율을 곱해 센트 미만 버림,
+  // 매도는 제세금(SEC fee 등)을 따로 곱해 센트 미만 올림. 평단에는 넣지 않고 잔금(정산금액)에만 반영한다.
+  function dayFee(gross, side, rate, sec) {
+    if (!(gross > 0)) return 0;
+    const base = Math.floor(gross * rate * 100 + 1e-7) / 100;
+    const tax = side === 'sell' && sec > 0 ? Math.ceil(gross * sec * 100 - 1e-7) / 100 : 0;
+    return Math.round((base + tax) * 100) / 100;
   }
 
   // 그날 주문(o)에 대해 기록 입력 칸 목록을 만든다
@@ -97,10 +108,12 @@
   }
 
   // 하루치 체결을 상태(st)에 반영한다. T 변화 규칙은 engine.js run()과 같다.
-  function applyDay(st, o, fills, close, cfg) {
-    const n = cfg.n, fee = cfg.feeRate, tgt = E.targetPct(cfg);
+  // feeOverride: { buy, sell } 그날 실제 수수료를 직접 넣은 경우(비우면 계산값)
+  function applyDay(st, o, fills, close, cfg, feeOverride) {
+    const n = cfg.n, tgt = E.targetPct(cfg);
     const events = [];
     let realized = 0, soldLimit = false, soldLoc = false, soldMoc = false, soldAny = false, stratBought = 0, tInc = 0;
+    let sellGross = 0, buyGross = 0;
     const sells = fills.filter((f) => ROLES[f.role] && ROLES[f.role].side === 'sell' && f.qty > 0)
       .sort((a, b) => SELL_ORDER.indexOf(a.role) - SELL_ORDER.indexOf(b.role));
     const outFills = [];
@@ -108,8 +121,9 @@
       const q = Math.min(+f.qty, st.shares);
       if (q <= 0) continue;
       const gross = q * f.price;
-      st.cash += gross * (1 - fee);
-      const pnl = q * (f.price - st.avg) - gross * fee;
+      sellGross += gross;
+      st.cash += gross;
+      const pnl = q * (f.price - st.avg); // 수수료 전 손익. 수수료는 아래에서 그날 합계로 뺀다
       st.shares -= q;
       if (st.shares === 0) st.avg = 0;
       realized += pnl; soldAny = true;
@@ -122,14 +136,21 @@
       const R = ROLES[f.role];
       if (!R || R.side !== 'buy' || !(f.qty > 0)) continue;
       const q = +f.qty, cost = q * f.price;
-      st.avg = (st.avg * st.shares + cost) / (st.shares + q);
+      buyGross += cost;
+      st.avg = (st.avg * st.shares + cost) / (st.shares + q); // 평단 = 체결가 × 수량만(수수료 제외)
       st.shares += q;
-      st.cash -= cost * (1 + fee);
+      st.cash -= cost;
       if (R.strat) stratBought += q;
       if (f.role === 'starBuy') tInc += o.kind === 'FRONT' ? 0.5 : 1;
       if (f.role === 'avgBuy') tInc += 0.5;
       outFills.push({ role: f.role, qty: q, price: +f.price, pnl: 0 });
     }
+    const ov = feeOverride || {};
+    const has = (v) => v != null && v !== '' && !isNaN(v);
+    const feeSell = has(ov.sell) ? +ov.sell : dayFee(sellGross, 'sell', cfg.rate, cfg.sec);
+    const feeBuy = has(ov.buy) ? +ov.buy : dayFee(buyGross, 'buy', cfg.rate, cfg.sec);
+    st.cash -= feeSell + feeBuy; // 잔금 = 정산금액 기준
+    realized -= feeSell + feeBuy; // 실현손익(세후): 그날 매수·매도 수수료를 모두 비용으로
     let cycleStart = false;
     if (o.kind === 'FIRST') {
       if (stratBought > 0) { st.T = 1; st.mode = 'NORMAL'; cycleStart = true; events.push('사이클 시작'); }
@@ -155,7 +176,7 @@
         else { st.mode = 'NORMAL'; events.push('리버스 종료 → 일반모드'); }
       }
     }
-    return { realized, events, fills: outFills, cycleStart, cycleEnd };
+    return { realized, events, fills: outFills, cycleStart, cycleEnd, feeBuy, feeSell, buyGross, sellGross };
   }
 
   function addDays(d, k) { const t = new Date(d + 'T00:00:00Z'); t.setUTCDate(t.getUTCDate() + k); return t.toISOString().slice(0, 10); }
@@ -196,7 +217,7 @@
       const sma5 = closes.length ? closes.reduce((a, c) => a + c, 0) / closes.length : prevClose;
       const before = Object.assign({}, st);
       const o = E.makeOrders(st, cfg, tick, sma5, st.cash);
-      const res = applyDay(st, o, rec ? rec.fills || [] : [], close, cfg);
+      const res = applyDay(st, o, rec ? rec.fills || [] : [], close, cfg, rec ? { buy: rec.feeBuy, sell: rec.feeSell } : null);
       const adj = rec && rec.adjust;
       if (adj) {
         if (adj.cashDelta) st.cash += +adj.cashDelta;
@@ -221,7 +242,7 @@
       if (st.cash < -0.5) warnings.push(`${date}: 잔금이 마이너스(${st.cash.toFixed(2)})가 됐습니다. 체결 기록을 확인하세요.`);
       if (close > 0) { closes.push(close); if (closes.length > 5) closes.shift(); }
       days.push({ date, recorded: !!rec, close, o, before, after: Object.assign({}, st), fills: res.fills, events: res.events,
-        realized: res.realized, cumRealized, cycleEnd: ended, cycleNo: ended ? ended.no : cyc ? cyc.no : null, note: rec ? rec.note || '' : '',
+        realized: res.realized, cumRealized, feeBuy: res.feeBuy, feeSell: res.feeSell, feeManual: !!(rec && ((rec.feeBuy ?? '') !== '' || (rec.feeSell ?? '') !== '')), cycleEnd: ended, cycleNo: ended ? ended.no : cyc ? cyc.no : null, note: rec ? rec.note || '' : '',
         equity: close > 0 ? st.cash + st.shares * close : null, adjust: adj || null });
     }
 
@@ -256,5 +277,5 @@
     return n * inv / (inv + Math.max(0, cash));
   }
 
-  root.MubaeTracker = { ROLES, cfgOf, orderRows, autoJudge, applyDay, replay, estimateT, nextWeekday, addDays };
+  root.MubaeTracker = { ROLES, cfgOf, dayFee, orderRows, autoJudge, applyDay, replay, estimateT, nextWeekday, addDays };
 })(typeof window !== 'undefined' ? window : globalThis);
