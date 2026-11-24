@@ -1,0 +1,44 @@
+name: 가격 데이터 갱신 & 배포
+
+on:
+  schedule:
+    - cron: "17 23 * * 1-5"   # 평일 23:17 UTC = 한국시간 다음날 오전 8시 17분 (미국장 마감 후)
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: 규칙 검증
+        run: python test_rules.py
+      - name: 가격 데이터 받기
+        run: python scripts/fetch_prices.py
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: app
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

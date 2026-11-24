@@ -1,0 +1,13 @@
+# 원문 자료(카페 글·타인 스크립트)는 공개 저장소에 올리지 않는다
+*.pdf
+무매v4 스크립트.txt
+
+# 로컬 생성물
+/data/
+/results/
+/dashboard/
+__pycache__/
+*.pyc
+
+# 구글 시트 방식용(더 이상 사용 안 함)
+apps_script/

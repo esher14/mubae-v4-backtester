@@ -1,0 +1,663 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="라오어 무한매수법 V4.0 규칙으로 TQQQ·SOXL 일봉 백테스트. 기간 수익률, MDD, 사이클 종료 시점.">
+<title>무매 V4 백테스터</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+KR:wght@400;500;600&display=swap">
+<style>
+/* 레이아웃: 왼쪽 조건 패널(데스크톱 고정) + 오른쪽 결과 열. 좁은 화면에서는 위아래로 쌓는다. 수익=빨강, 손실=파랑(국내 시세 관례) */
+:root {
+  --bg: #f4f6f8; --panel: #ffffff; --ink: #15202b; --muted: #5b6977; --line: #dde3ea;
+  --accent: #0f6e66; --accent-soft: #e3f1ef; --up: #d23b3b; --down: #2c63c9; --rev: rgba(226, 150, 40, 0.16); --rev-ink: #a5670f;
+  --hold: #9aa6b2;
+  --font-ui: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  --font-num: "IBM Plex Mono", ui-monospace, "Consolas", monospace;
+  --r: 10px;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0e141a; --panel: #161e26; --ink: #e4ebf2; --muted: #93a2b1; --line: #29343f;
+  --accent: #3cb5a8; --accent-soft: #15302d; --up: #ff6a6a; --down: #6d9cff; --rev: rgba(233, 162, 59, 0.13); --rev-ink: #e8a74a;
+  --hold: #5f6c79; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #0e141a; --panel: #161e26; --ink: #e4ebf2; --muted: #93a2b1; --line: #29343f;
+  --accent: #3cb5a8; --accent-soft: #15302d; --up: #ff6a6a; --down: #6d9cff; --rev: rgba(233, 162, 59, 0.13); --rev-ink: #e8a74a;
+  --hold: #5f6c79; color-scheme: dark; }
+html, body { margin: 0; }
+[hidden] { display: none !important; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font-ui); font-size: 14px; line-height: 1.5; }
+.wrap { max-width: 1280px; margin: 0 auto; padding-block: 24px 48px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 24px; align-items: start; }
+@media (max-width: 860px) { .wrap { grid-template-columns: minmax(0, 1fr); } }
+h1 { font-size: 20px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
+h2 { font-size: 15px; font-weight: 600; margin: 0; text-wrap: balance; }
+.num { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); }
+.up { color: var(--up); } .down { color: var(--down); }
+
+/* 조건 패널 */
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 18px; display: flex; flex-direction: column; gap: 14px; }
+.side { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 16px); }
+@media (max-width: 860px) { .side { position: static; } }
+.field { display: flex; flex-direction: column; gap: 5px; }
+.field > span { font-size: 12px; color: var(--muted); font-weight: 500; }
+.field small { font-size: 11.5px; color: var(--muted); }
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+input, select { font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 7px; padding: 7px 9px; min-width: 0; width: 100%; box-sizing: border-box; }
+input.num { font-family: var(--font-num); }
+input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.seg { display: flex; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; }
+.seg label { flex: 1; text-align: center; cursor: pointer; }
+.seg input { position: absolute; opacity: 0; pointer-events: none; width: 1px; }
+.seg span { display: block; padding: 6px 4px; font-size: 13px; }
+.seg input:checked + span { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.seg input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: -2px; }
+.btn { font: inherit; font-weight: 600; background: var(--accent); color: var(--panel); border: 0; border-radius: 7px; padding: 9px 12px; cursor: pointer; }
+.msg { font-size: 12.5px; color: var(--up); margin: 0; }
+.datainfo { font-size: 11.5px; color: var(--muted); margin: 0; }
+
+/* 결과 */
+.main { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+.head { display: flex; flex-direction: column; gap: 4px; }
+.head p { margin: 0; }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; }
+.kpi { background: var(--panel); padding: 14px 16px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.kpi .k { font-size: 12px; color: var(--muted); }
+.kpi .v { font-family: var(--font-num); font-size: 22px; font-weight: 500; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kpi .s { font-size: 11.5px; color: var(--muted); font-family: var(--font-num); }
+.chip { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; width: fit-content; }
+.chip.normal { background: var(--accent-soft); color: var(--accent); }
+.chip.reverse { background: var(--rev); color: var(--rev-ink); }
+.chip.idle { background: var(--bg); color: var(--muted); }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.cardhead { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; }
+.toggles { display: flex; flex-wrap: wrap; gap: 6px; }
+.tg { font: inherit; font-size: 12.5px; border: 1px solid var(--line); background: var(--panel); color: var(--muted); border-radius: 999px; padding: 4px 10px; cursor: pointer; }
+.tg[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); font-weight: 600; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.sw { width: 14px; height: 3px; border-radius: 2px; display: inline-block; background: var(--ink); }
+.sw.hold { background: var(--hold); }
+.sw.rev { height: 10px; background: var(--rev); border: 1px solid var(--rev-ink); }
+.dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+.dot.up { background: var(--up); } .dot.down { background: var(--down); }
+.chart { position: relative; width: 100%; min-height: 300px; }
+.chart.dd { min-height: 130px; }
+.chart svg { display: block; width: 100%; overflow: visible; }
+.chart .tick text { fill: var(--muted); font-family: var(--font-num); font-size: 11px; }
+.chart .domain, .chart .tick line { stroke: var(--line); }
+.chart .grid line { stroke: var(--line); stroke-opacity: 0.7; }
+.chart .grid .domain { display: none; }
+.tip { position: absolute; top: 6px; left: 0; pointer-events: none; background: var(--panel); border: 1px solid var(--line); box-shadow: 0 6px 18px rgba(0,0,0,.12); border-radius: 8px; padding: 8px 10px; font-size: 12px; z-index: 3; min-width: 170px; max-width: 260px; }
+.tip .d { color: var(--muted); font-family: var(--font-num); margin-bottom: 4px; }
+.tip .r { display: flex; justify-content: space-between; gap: 14px; }
+.tip .r b { font-family: var(--font-num); font-weight: 500; }
+.tip .ev { margin-top: 5px; padding-top: 5px; border-top: 1px solid var(--line); color: var(--muted); white-space: normal; }
+.tablewrap { overflow-x: auto; }
+.tablewrap.tall { max-height: 460px; overflow-y: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { padding: 7px 10px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+th { font-size: 12px; color: var(--muted); font-weight: 500; position: sticky; top: 0; background: var(--panel); }
+td { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+th.l, td.l { text-align: left; }
+td.lbl { font-family: var(--font-ui); font-weight: 500; }
+tr.open td { background: var(--rev); }
+tr.na td { color: var(--muted); }
+.orders { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; font-family: var(--font-num); font-size: 13px; }
+.orders li.sell { color: var(--down); } .orders li.buy { color: var(--up); }
+.statebar { display: flex; flex-wrap: wrap; gap: 4px 18px; font-size: 12.5px; color: var(--muted); }
+.statebar b { color: var(--ink); font-family: var(--font-num); font-weight: 500; }
+details { font-size: 12.5px; color: var(--muted); }
+details summary { cursor: pointer; color: var(--ink); font-weight: 500; }
+details ul { padding-left: 1.2em; margin: 8px 0 0; line-height: 1.7; }
+.empty { padding: 30px 0; text-align: center; color: var(--muted); }
+</style>
+
+</head>
+<body>
+<div class="wrap">
+  <aside class="side">
+    <form class="panel" id="form" autocomplete="off">
+      <div class="head">
+        <h1>무매 V4 백테스터</h1>
+        <p class="muted" style="font-size:12.5px">라오어 무한매수법 V4.0 규칙으로 일봉 백테스트를 돌립니다. 값을 바꾸면 바로 다시 계산됩니다.</p>
+      </div>
+      <label class="field"><span>종목</span>
+        <select id="f-ticker"><option value="TQQQ">TQQQ</option><option value="SOXL">SOXL</option></select>
+      </label>
+      <div class="row2">
+        <label class="field"><span>분할수</span>
+          <input class="num" id="f-n" type="number" min="4" max="100" step="1" value="20" inputmode="numeric">
+        </label>
+        <label class="field"><span>목표수익률 %</span>
+          <input class="num" id="f-target" type="number" min="1" max="100" step="0.5" value="15" inputmode="decimal">
+        </label>
+      </div>
+      <div class="field"><span>추적 기간</span>
+        <div class="row2">
+          <input class="num" id="f-start" type="date" value="2015-01-02" aria-label="시작일">
+          <input class="num" id="f-end" type="date" aria-label="종료일 (비우면 데이터 끝까지)">
+        </div>
+        <small>왼쪽 시작일, 오른쪽 종료일. 종료일을 비우면 데이터 끝까지.</small>
+      </div>
+      <label class="field"><span>원금 $</span>
+        <input class="num" id="f-principal" type="number" min="100" step="100" value="20000" inputmode="numeric">
+      </label>
+      <div class="field"><span>사이클 종료 후</span>
+        <div class="seg" role="radiogroup" aria-label="사이클 종료 후 재투자">
+          <label><input type="radio" name="f-comp" id="f-comp-1" value="1" checked><span>복리</span></label>
+          <label><input type="radio" name="f-comp" id="f-comp-0" value="0"><span>단리</span></label>
+        </div>
+        <small>단리는 원금을 넘는 수익을 인출해 따로 둡니다(평가금에는 포함).</small>
+      </div>
+      <label class="field"><span>수수료 % (편도)</span>
+        <input class="num" id="f-fee" type="number" min="0" max="2" step="0.01" value="0" inputmode="decimal">
+      </label>
+      <p class="msg" id="msg" hidden></p>
+      <button class="btn" type="submit">백테스트 실행</button>
+      <p class="datainfo" id="datainfo">가격 데이터를 불러오는 중…</p>
+      <p class="datainfo" id="liveinfo" hidden></p>
+    </form>
+  </aside>
+
+  <main class="main">
+    <section class="head" id="summary-head">
+      <h2 id="run-title">—</h2>
+      <p class="muted num" id="run-period" style="font-size:12.5px">—</p>
+    </section>
+
+    <section class="kpis" id="kpis" aria-label="요약">
+      <div class="kpi"><span class="k">최종 평가금</span><span class="v" id="k-final">—</span><span class="s" id="k-final-s">—</span></div>
+      <div class="kpi"><span class="k">총수익률</span><span class="v" id="k-total">—</span><span class="s" id="k-cagr">—</span></div>
+      <div class="kpi"><span class="k">MDD</span><span class="v down" id="k-mdd">—</span><span class="s" id="k-mdd-s">—</span></div>
+      <div class="kpi"><span class="k">완료 사이클</span><span class="v" id="k-cycles">—</span><span class="s" id="k-cycles-s">—</span></div>
+      <div class="kpi"><span class="k">현재 상태</span><span id="k-state" class="chip idle">—</span><span class="s" id="k-state-s">—</span></div>
+    </section>
+
+    <section class="card" id="periods">
+      <div class="cardhead">
+        <h2>기간 수익률</h2>
+        <div class="toggles" role="group" aria-label="기간 기준">
+          <button type="button" class="tg" id="p-since" aria-pressed="true">시작일부터</button>
+          <button type="button" class="tg" id="p-recent" aria-pressed="false">종료일 기준 최근</button>
+        </div>
+      </div>
+      <p class="muted" id="periods-note" style="margin:0;font-size:12.5px">—</p>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th class="l">기간</th><th class="l">구간</th><th>평가금</th><th>수익률</th><th>연환산</th><th>구간 MDD</th><th>완료 사이클</th></tr></thead>
+          <tbody id="periods-body"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card" id="chart-card">
+      <div class="cardhead">
+        <h2>평가금 추이와 사이클 종료 시점</h2>
+        <div class="toggles">
+          <button type="button" class="tg" id="t-log" aria-pressed="true">로그 축</button>
+          <button type="button" class="tg" id="t-hold" aria-pressed="true">단순 보유 비교</button>
+        </div>
+      </div>
+      <div class="legend">
+        <span><i class="sw"></i>무매 평가금</span>
+        <span id="lg-hold"><i class="sw hold"></i>단순 보유</span>
+        <span><i class="dot up"></i>사이클 종료(수익)</span>
+        <span><i class="dot down"></i>사이클 종료(손실)</span>
+        <span><i class="sw rev"></i>리버스 모드 구간</span>
+      </div>
+      <div class="chart" id="chart-eq"></div>
+      <div class="muted" style="font-size:12px">고점 대비 낙폭</div>
+      <div class="chart dd" id="chart-dd"></div>
+    </section>
+
+    <section class="card" id="cycles">
+      <div class="cardhead">
+        <h2>사이클 기록</h2>
+        <span class="muted" id="cycles-note" style="font-size:12.5px">—</span>
+      </div>
+      <div class="tablewrap tall">
+        <table>
+          <thead><tr><th>#</th><th class="l">시작일</th><th class="l">종료일</th><th>거래일</th><th>시작 금액</th><th>종료 금액</th><th>수익률</th><th>최대 T</th><th>리버스</th><th>사이클 중 최저</th></tr></thead>
+          <tbody id="cycles-body"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card" id="orders-card">
+      <div class="cardhead">
+        <h2>다음 거래일 주문표</h2>
+        <span class="muted num" id="orders-date" style="font-size:12.5px">—</span>
+      </div>
+      <div class="statebar" id="orders-state"></div>
+      <ul class="orders" id="orders"></ul>
+    </section>
+
+    <details>
+      <summary>계산 방식과 가정</summary>
+      <ul>
+        <li>평가금 = 현금 + 보유수량 × 당일 종가(+단리 인출액). 수익률과 MDD는 모두 이 평가금 기준(미실현 손익 포함)입니다.</li>
+        <li>가격은 Yahoo Finance 일봉을 액면분할 복원한 실제 당시 가격이며 배당은 반영하지 않았습니다.</li>
+        <li>매매 규칙은 라오어 님의 무한매수법 V4.0 방법론을 따릅니다. 규칙 자체는 원문(<a href="https://cafe.naver.com/infinitebuying/79263" target="_blank" rel="noopener">일반모드</a>, <a href="https://cafe.naver.com/infinitebuying/79264" target="_blank" rel="noopener">소진후 리버스모드</a>)을 참고하세요.</li>
+        <li>일봉만으로 시뮬레이션하므로, 아래로 거는 추가 LOC 매수는 개수 제한 없이 건 것으로 보고, 큰수 매수는 반영하지 않습니다.</li>
+        <li>지정가 매도는 당일 고가가 목표가 이상이면 목표가에 체결된 것으로 봅니다(갭 상승도 프리·애프터장 체결로 가정).</li>
+        <li>리버스 종료 조건을 만족해도 소진 상태(T가 분할수−1 초과)가 풀리지 않았으면 리버스를 유지합니다.</li>
+        <li>사이클이 끝나면 다음 거래일에 새 사이클을 시작합니다. 시작일이 휴장일이면 다음 거래일에 시작합니다.</li>
+        <li>기간 수익률의 각 시점은 해당 날짜 이전 마지막 거래일 종가 기준입니다. 연환산은 1년 이상 구간만 표시합니다.</li>
+        <li>과거 데이터로 계산한 참고용 결과이며 투자 권유가 아닙니다.</li>
+      </ul>
+    </details>
+  </main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<script src="engine.js"></script>
+<script>
+(function () {
+  const E = window.MubaeEngine;
+  const $ = (id) => document.getElementById(id);
+  const S = { bars: {}, result: null, view: { log: true, hold: true, period: 'since' } };
+  const STORE_KEY = 'mubae-backtester-inputs-v1';
+  const fmtMoney = (v) => '$' + d3.format(',.0f')(v);
+  const fmtMoney2 = (v) => '$' + d3.format(',.2f')(v);
+  const fmtPct = (v, d = 2) => (v > 0 ? '+' : '') + v.toFixed(d) + '%';
+  const cls = (v) => (v > 0 ? 'up' : v < 0 ? 'down' : '');
+  const parseDate = d3.utcParse('%Y-%m-%d');
+  const fmtDay = d3.utcFormat('%Y-%m-%d');
+
+  // ---------- 입력 ----------
+  function readForm() {
+    return {
+      ticker: $('f-ticker').value, n: Number($('f-n').value), target: $('f-target').value === '' ? null : Number($('f-target').value),
+      start: $('f-start').value || null, end: $('f-end').value || null, principal: Number($('f-principal').value),
+      compound: document.querySelector('input[name="f-comp"]:checked').value === '1', feeRate: Number($('f-fee').value || 0) / 100,
+    };
+  }
+  function saveForm(c) { try { localStorage.setItem(STORE_KEY, JSON.stringify(c)); } catch (e) {} }
+  function restoreForm() {
+    let c = null;
+    try { c = JSON.parse(localStorage.getItem(STORE_KEY) || 'null'); } catch (e) {}
+    if (!c) return;
+    if (c.ticker) $('f-ticker').value = c.ticker;
+    if (c.n) $('f-n').value = c.n;
+    if (c.target != null) $('f-target').value = c.target;
+    if (c.start) $('f-start').value = c.start;
+    $('f-end').value = c.end || '';
+    if (c.principal) $('f-principal').value = c.principal;
+    $(c.compound === false ? 'f-comp-0' : 'f-comp-1').checked = true;
+    if (c.feeRate != null) $('f-fee').value = +(c.feeRate * 100).toFixed(4);
+  }
+  function showMsg(t) { $('msg').textContent = t || ''; $('msg').hidden = !t; }
+
+  async function loadBars(t) {
+    if (!S.bars[t]) {
+      const res = await fetch(`data/${t}.csv`, { cache: 'no-cache' });
+      if (!res.ok) throw new Error(`${t} 가격 데이터를 불러오지 못했습니다 (HTTP ${res.status}).`);
+      S.bars[t] = E.parseCSV(await res.text());
+    }
+    return S.bars[t];
+  }
+
+  // ---------- 데이터 갱신 정보 (GitHub Actions가 매일 data/meta.json 과 함께 배포) ----------
+  let metaP = null;
+  function loadMeta() {
+    if (!metaP) metaP = fetch('data/meta.json', { cache: 'no-cache' }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+    return metaP;
+  }
+  function showMeta() {
+    loadMeta().then((m) => {
+      const el = $('liveinfo');
+      el.textContent = m && m.updated_at ? `평일 매일 자동 갱신 · 마지막 갱신 ${m.updated_at}` : '';
+      el.hidden = !el.textContent;
+    });
+  }
+
+  let runSeq = 0;
+  async function compute() {
+    const seq = ++runSeq;
+    const c = readForm();
+    let bars;
+    try { bars = await loadBars(c.ticker); } catch (e) { showMsg(e.message); return; }
+    if (seq !== runSeq) return;
+    const first = bars[0].date, last = bars[bars.length - 1].date;
+    $('f-start').min = first; $('f-start').max = last; $('f-end').min = first; $('f-end').max = last;
+    $('datainfo').textContent = `${c.ticker} 가격 데이터: ${first} ~ ${last}`;
+    if (!(c.n >= 4)) return showMsg('분할수는 4 이상으로 입력하세요.');
+    if (c.target != null && !(c.target > 0)) return showMsg('목표수익률은 0보다 큰 값으로 입력하세요.');
+    if (!(c.principal >= 100)) return showMsg('원금은 $100 이상으로 입력하세요.');
+    if (!(c.feeRate >= 0)) return showMsg('수수료는 0 이상으로 입력하세요.');
+    if (c.start && c.start > last) return showMsg(`시작일이 데이터 마지막 날(${last})보다 늦습니다.`);
+    if (c.start && c.end && c.end < c.start) return showMsg('종료일이 시작일보다 빠릅니다.');
+    let r;
+    try { r = E.run(c, bars); } catch (e) { return showMsg(e.message); }
+    showMsg('');
+    saveForm(c);
+    r.hold = holdSeries(bars, r);
+    r.dataLast = last;
+    S.result = r;
+    renderAll();
+    showMeta();
+  }
+
+  function holdSeries(bars, r) {
+    const i0 = bars.findIndex((b) => b.date === r.daily[0].date);
+    let sh = r.cfg.principal / bars[i0].close;
+    const out = [];
+    for (let i = i0; i < i0 + r.daily.length; i++) {
+      if (i > i0 && bars[i].split !== 1) sh *= bars[i].split;
+      out.push(sh * bars[i].close);
+    }
+    return out;
+  }
+
+  // ---------- 요약 ----------
+  function renderSummary() {
+    const r = S.result, s = r.stats;
+    $('run-title').textContent = `${s.ticker} · ${s.n}분할 · 목표 ${s.target}% · 원금 ${fmtMoney(s.principal)} · ${s.compound ? '복리' : '단리'}${r.cfg.feeRate ? ` · 수수료 ${(r.cfg.feeRate * 100).toFixed(2)}%` : ''}`;
+    $('run-period').textContent = `${s.start} ~ ${s.end} · ${s.years.toFixed(2)}년 · ${r.daily.length.toLocaleString()}거래일`;
+    $('k-final').textContent = fmtMoney(s.finalEquity);
+    $('k-final').className = 'v ' + cls(s.finalEquity - s.principal);
+    $('k-final-s').textContent = `손익 ${fmtMoney(s.finalEquity - s.principal).replace('$-', '-$')}`;
+    $('k-total').textContent = fmtPct(s.totalReturnPct);
+    $('k-total').className = 'v ' + cls(s.totalReturnPct);
+    $('k-cagr').textContent = s.years >= 1 ? `CAGR ${fmtPct(s.cagrPct)}` : 'CAGR은 1년 이상부터 표시';
+    $('k-mdd').textContent = s.mddPct.toFixed(2) + '%';
+    $('k-mdd-s').textContent = s.mddPeak ? `${s.mddPeak} → ${s.mddTrough}` : '낙폭 없음';
+    $('k-cycles').textContent = `${s.cycles}회`;
+    $('k-cycles-s').textContent = `수익 ${s.winCycles} · 손실 ${s.cycles - s.winCycles} · 리버스 진입 ${s.reverseEntries}회`;
+    const st = $('k-state');
+    if (s.openCycle) {
+      const rev = s.openMode === 'REVERSE';
+      st.className = 'chip ' + (rev ? 'reverse' : 'normal');
+      st.textContent = `${rev ? '리버스' : '일반'} · T ${s.openT.toFixed(2)}`;
+      $('k-state-s').textContent = `진행 중 ${s.openCycle.days}거래일, 평가손익 ${fmtPct(s.openUnrealizedPct)}`;
+    } else {
+      st.className = 'chip idle';
+      st.textContent = '보유 없음';
+      $('k-state-s').textContent = '다음 거래일 새 사이클 시작';
+    }
+  }
+
+  // ---------- 기간 수익률 ----------
+  const PERIODS = [['1개월', 1], ['3개월', 3], ['6개월', 6], ['1년', 12], ['2년', 24], ['3년', 36], ['5년', 60], ['10년', 120]];
+  function addMonths(iso, m) {
+    const d = new Date(iso + 'T00:00:00Z');
+    const day = d.getUTCDate();
+    d.setUTCDate(1); d.setUTCMonth(d.getUTCMonth() + m);
+    const dim = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
+    d.setUTCDate(Math.min(day, dim));
+    return d.toISOString().slice(0, 10);
+  }
+  function lastIdxOnOrBefore(daily, iso) {
+    let lo = 0, hi = daily.length - 1, ans = -1;
+    while (lo <= hi) { const mid = (lo + hi) >> 1; if (daily[mid].date <= iso) { ans = mid; lo = mid + 1; } else hi = mid - 1; }
+    return ans;
+  }
+  function windowStats(daily, i0, i1, baseEq) {
+    let peak = baseEq, mdd = 0, cyc = 0;
+    for (let i = i0; i <= i1; i++) {
+      const e = daily[i].equity;
+      if (e > peak) peak = e;
+      mdd = Math.min(mdd, e / peak - 1);
+      if (daily[i].cycleEnd) cyc++;
+    }
+    return { mdd: mdd * 100, cyc };
+  }
+  function renderPeriods() {
+    const r = S.result, daily = r.daily, p0 = r.cfg.principal, n = daily.length;
+    const since = S.view.period === 'since';
+    $('p-since').setAttribute('aria-pressed', since);
+    $('p-recent').setAttribute('aria-pressed', !since);
+    $('periods-note').textContent = since
+      ? `시작일(${daily[0].date}) 원금 ${fmtMoney(p0)}에서 출발해 각 기간이 지난 시점의 누적 결과입니다.`
+      : `종료일(${daily[n - 1].date})로부터 거슬러 올라간 최근 구간의 결과입니다.`;
+    const tb = $('periods-body');
+    tb.replaceChildren();
+    const rows = PERIODS.map(([label, m]) => ({ label, m })).concat([{ label: '전체', m: null }]);
+    for (const { label, m } of rows) {
+      let i0, i1, base, baseDate, endDate;
+      if (m == null) { i0 = 0; i1 = n - 1; base = p0; baseDate = daily[0].date; }
+      else if (since) {
+        const target = addMonths(daily[0].date, m);
+        if (target > daily[n - 1].date) { addNA(tb, label, `${daily[0].date} ~ ${target}`, '기간이 추적 기간보다 깁니다'); continue; }
+        i0 = 0; i1 = lastIdxOnOrBefore(daily, target); base = p0; baseDate = daily[0].date;
+      } else {
+        const from = addMonths(daily[n - 1].date, -m);
+        if (from < daily[0].date) { addNA(tb, label, `${from} ~ ${daily[n - 1].date}`, '기간이 추적 기간보다 깁니다'); continue; }
+        const ib = lastIdxOnOrBefore(daily, from);
+        i0 = ib + 1; i1 = n - 1; base = daily[ib].equity; baseDate = daily[ib].date;
+      }
+      endDate = daily[i1].date;
+      const eq = daily[i1].equity;
+      const ret = (eq / base - 1) * 100;
+      const yrs = (Date.parse(endDate) - Date.parse(baseDate)) / 86400000 / 365.25;
+      const ann = yrs >= 0.999 ? (Math.pow(eq / base, 1 / yrs) - 1) * 100 : null;
+      const w = windowStats(daily, i0, i1, base);
+      const tr = tb.insertRow();
+      cell(tr, label, 'l lbl');
+      cell(tr, `${baseDate} ~ ${endDate}`, 'l muted');
+      cell(tr, fmtMoney(eq));
+      cell(tr, fmtPct(ret), cls(ret));
+      cell(tr, ann == null ? '—' : fmtPct(ann), ann == null ? 'muted' : cls(ann));
+      cell(tr, w.mdd.toFixed(2) + '%', w.mdd < 0 ? 'down' : '');
+      cell(tr, w.cyc + '회');
+    }
+  }
+  function addNA(tb, label, range, why) {
+    const tr = tb.insertRow(); tr.className = 'na';
+    cell(tr, label, 'l lbl'); cell(tr, range, 'l');
+    const td = cell(tr, why, 'l'); td.colSpan = 5;
+  }
+  function cell(tr, text, c) { const td = tr.insertCell(); td.textContent = text; if (c) td.className = c; return td; }
+
+  // ---------- 차트 ----------
+  function yTicksLog(y) {
+    let t = y.ticks().filter((v) => [1, 2, 5].includes(+v.toExponential().charAt(0)));
+    if (t.length > 7) t = t.filter((v) => v.toExponential().charAt(0) === '1');
+    return t;
+  }
+  function axisLeftMeasured(svg, y, tv, fmt) {
+    const g = svg.append('g').call(d3.axisLeft(y).tickValues(tv).tickFormat(fmt).tickSizeOuter(0));
+    let mw = 0;
+    g.selectAll('text').each(function () { mw = Math.max(mw, this.getComputedTextLength()); });
+    return { g, ml: Math.ceil(mw) + 12 };
+  }
+
+  let hoverIdx = null;
+  function renderCharts() {
+    const r = S.result, daily = r.daily, hold = r.hold, view = S.view;
+    $('t-log').setAttribute('aria-pressed', view.log);
+    $('t-hold').setAttribute('aria-pressed', view.hold);
+    $('lg-hold').hidden = !view.hold;
+    const elE = $('chart-eq'), elD = $('chart-dd');
+    elE.replaceChildren(); elD.replaceChildren();
+    const W = Math.max(280, elE.clientWidth);
+    const H = 300, H2 = 130, top = 10, bot = H - 24, bot2 = H2 - 22;
+    const xs = daily.map((d) => parseDate(d.date));
+
+    const vals = daily.map((d) => d.equity).concat(view.hold ? hold : []);
+    const ext = d3.extent(vals);
+    const y = view.log ? d3.scaleLog([Math.max(1, ext[0] * 0.92), ext[1] * 1.08], [bot, top])
+      : d3.scaleLinear([0, ext[1] * 1.04], [bot, top]).nice();
+    const tv = view.log ? yTicksLog(y) : y.ticks(5);
+    const fmtY = (v) => '$' + d3.format('~s')(v).replace('G', 'B');
+
+    // 낙폭 차트(먼저 축 폭을 재서 두 차트의 왼쪽 여백을 맞춘다)
+    const dds = daily.map((d) => d.dd * 100);
+    const holdDd = [];
+    { let pk = -Infinity; for (const v of hold) { pk = Math.max(pk, v); holdDd.push((v / pk - 1) * 100); } }
+    const ddMin = Math.min(d3.min(dds), view.hold ? d3.min(holdDd) : 0, -1);
+    const y2 = d3.scaleLinear([ddMin * 1.05, 0], [bot2, 6]).nice();
+
+    const svg = d3.select(elE).append('svg').attr('viewBox', `0 0 ${W} ${H}`).attr('height', H)
+      .attr('role', 'img').attr('aria-label', `${r.stats.ticker} 무한매수법 평가금 추이와 사이클 종료 시점`);
+    const svg2 = d3.select(elD).append('svg').attr('viewBox', `0 0 ${W} ${H2}`).attr('height', H2)
+      .attr('role', 'img').attr('aria-label', '고점 대비 낙폭');
+    const a1 = axisLeftMeasured(svg, y, tv, fmtY);
+    const a2 = axisLeftMeasured(svg2, y2, y2.ticks(4), (v) => v + '%');
+    const ml = Math.max(a1.ml, a2.ml), mr = 12;
+    a1.g.attr('transform', `translate(${ml},0)`);
+    a2.g.attr('transform', `translate(${ml},0)`);
+    const x = d3.scaleUtc(d3.extent(xs), [ml, W - mr]);
+    const nT = Math.max(2, Math.floor((W - ml - mr) / 90));
+
+    for (const [s, yy, b, ticks] of [[svg, y, bot, tv], [svg2, y2, bot2, y2.ticks(4)]]) {
+      s.insert('g', ':first-child').attr('class', 'grid').attr('transform', `translate(${ml},0)`)
+        .call(d3.axisLeft(yy).tickValues(ticks).tickSize(-(W - ml - mr)).tickFormat(''));
+      // 리버스 구간 음영
+      const bands = [];
+      let st = null;
+      daily.forEach((d, i) => {
+        const inRev = d.mode === 'REVERSE' || d.modeBefore === 'REVERSE';
+        if (inRev && st == null) st = i;
+        if ((!inRev || i === daily.length - 1) && st != null) { bands.push([st, inRev ? i : i - 1]); st = null; }
+      });
+      s.insert('g', '.grid + *').selectAll('rect').data(bands).join('rect')
+        .attr('x', (bd) => x(xs[bd[0]]) - 1).attr('width', (bd) => Math.max(2, x(xs[bd[1]]) - x(xs[bd[0]]) + 2))
+        .attr('y', yy === y ? top : 6).attr('height', (yy === y ? bot - top : bot2 - 6)).style('fill', 'var(--rev)');
+      s.append('g').attr('transform', `translate(0,${b})`).call(d3.axisBottom(x).ticks(nT).tickSizeOuter(0));
+    }
+
+    const ln = d3.line().x((d, i) => x(xs[i])).y((d) => d);
+    if (view.hold) {
+      svg.append('path').attr('d', ln(hold.map((v) => y(v)))).attr('fill', 'none').style('stroke', 'var(--hold)').attr('stroke-width', 1.2);
+      svg2.append('path').attr('d', ln(holdDd.map((v) => y2(v)))).attr('fill', 'none').style('stroke', 'var(--hold)').attr('stroke-width', 1);
+    }
+    svg.append('path').attr('d', ln(daily.map((d) => y(d.equity)))).attr('fill', 'none').style('stroke', 'var(--ink)').attr('stroke-width', 1.6).attr('stroke-linejoin', 'round');
+    const area = d3.area().x((d, i) => x(xs[i])).y0(y2(0)).y1((d) => y2(d));
+    svg2.append('path').attr('d', area(dds)).style('fill', 'var(--down)').attr('fill-opacity', 0.16);
+    svg2.append('path').attr('d', ln(dds.map((v) => y2(v)))).attr('fill', 'none').style('stroke', 'var(--down)').attr('stroke-width', 1.2);
+    svg2.append('line').attr('x1', ml).attr('x2', W - mr).attr('y1', y2(0)).attr('y2', y2(0)).style('stroke', 'var(--muted)').attr('stroke-opacity', 0.5);
+
+    // 사이클 종료 표시
+    const ends = [];
+    daily.forEach((d, i) => { if (d.cycleEnd) ends.push({ i, c: d.cycleEnd }); });
+    svg.append('g').selectAll('circle').data(ends).join('circle')
+      .attr('cx', (e) => x(xs[e.i])).attr('cy', (e) => y(daily[e.i].equity)).attr('r', 3.6)
+      .style('fill', (e) => (e.c.profit > 0 ? 'var(--up)' : 'var(--down)')).style('stroke', 'var(--panel)').attr('stroke-width', 1);
+    // 끝점 강조
+    const li = daily.length - 1;
+    svg.append('circle').attr('cx', x(xs[li])).attr('cy', y(daily[li].equity)).attr('r', 4.5).style('fill', 'var(--ink)');
+
+    // 호버
+    const tip = d3.select(elE).append('div').attr('class', 'tip').style('display', 'none');
+    const cur1 = svg.append('line').attr('y1', top).attr('y2', bot).style('stroke', 'var(--muted)').attr('stroke-dasharray', '3 3').attr('visibility', 'hidden');
+    const cur2 = svg2.append('line').attr('y1', 6).attr('y2', bot2).style('stroke', 'var(--muted)').attr('stroke-dasharray', '3 3').attr('visibility', 'hidden');
+    const dot = svg.append('circle').attr('r', 4).style('fill', 'var(--ink)').style('stroke', 'var(--panel)').attr('stroke-width', 1.5).attr('visibility', 'hidden');
+    const bis = d3.bisector((d) => d).center;
+    function show(mx) {
+      const i = bis(xs, x.invert(mx));
+      const d = daily[i];
+      const px = x(xs[i]);
+      cur1.attr('x1', px).attr('x2', px).attr('visibility', 'visible');
+      cur2.attr('x1', px).attr('x2', px).attr('visibility', 'visible');
+      dot.attr('cx', px).attr('cy', y(d.equity)).attr('visibility', 'visible');
+      tip.selectAll('*').remove();
+      tip.append('div').attr('class', 'd').text(d.date);
+      const rows = [['평가금', fmtMoney(d.equity)], ['수익률', fmtPct((d.equity / r.cfg.principal - 1) * 100)], ['낙폭', (d.dd * 100).toFixed(2) + '%'],
+        ['종가', fmtMoney2(d.close)], ['모드 · T', `${d.mode === 'REVERSE' ? '리버스' : '일반'} · ${d.T.toFixed(3)}`], ['보유', `${d.shares.toLocaleString()}주`]];
+      if (view.hold) rows.splice(2, 0, ['단순 보유', fmtMoney(hold[i])]);
+      for (const [k, v] of rows) { const rr = tip.append('div').attr('class', 'r'); rr.append('span').text(k); rr.append('b').text(v); }
+      const ev = d.events.slice();
+      if (d.cycleEnd) ev.unshift(`사이클 #${r.cycles.indexOf(d.cycleEnd) + 1} 종료: ${fmtPct(d.cycleEnd.retPct)} (${d.cycleEnd.days}거래일)`);
+      if (ev.length) tip.append('div').attr('class', 'ev').text(ev.join(' · '));
+      tip.style('display', 'block');
+      const sc = elE.clientWidth / W, tw = tip.node().offsetWidth;
+      let left = px * sc + 14;
+      if (left + tw > elE.clientWidth) left = px * sc - tw - 14;
+      tip.style('left', Math.max(0, left) + 'px');
+    }
+    function hide() { tip.style('display', 'none'); [cur1, cur2, dot].forEach((e) => e.attr('visibility', 'hidden')); }
+    for (const [s, h] of [[svg, H], [svg2, H2]]) {
+      s.append('rect').attr('x', ml).attr('y', 0).attr('width', W - ml - mr).attr('height', h).attr('fill', 'transparent')
+        .on('pointermove', (ev) => show(d3.pointer(ev)[0])).on('pointerleave', hide);
+    }
+  }
+
+  // ---------- 사이클 표 ----------
+  function renderCycles() {
+    const r = S.result, s = r.stats, tb = $('cycles-body');
+    tb.replaceChildren();
+    const rets = r.cycles.map((c) => c.retPct);
+    $('cycles-note').textContent = r.cycles.length
+      ? `평균 ${fmtPct(d3.mean(rets))} · 최고 ${fmtPct(d3.max(rets))} · 최저 ${fmtPct(d3.min(rets))} · 평균 ${d3.mean(r.cycles, (c) => c.days).toFixed(1)}거래일`
+      : '완료된 사이클이 없습니다';
+    r.cycles.forEach((c, k) => {
+      const tr = tb.insertRow();
+      cell(tr, String(k + 1));
+      cell(tr, c.start, 'l'); cell(tr, c.end, 'l');
+      cell(tr, String(c.days));
+      cell(tr, fmtMoney(c.startCapital)); cell(tr, fmtMoney(c.endCash));
+      cell(tr, fmtPct(c.retPct), cls(c.retPct));
+      cell(tr, c.maxT.toFixed(2));
+      cell(tr, c.reverseEntries ? c.reverseEntries + '회' : '—', c.reverseEntries ? '' : 'muted');
+      cell(tr, fmtPct(c.lowRet * 100), c.lowRet < 0 ? 'down' : '');
+    });
+    if (s.openCycle) {
+      const c = s.openCycle, tr = tb.insertRow();
+      tr.className = 'open';
+      cell(tr, '진행');
+      cell(tr, c.start, 'l'); cell(tr, '진행 중', 'l lbl');
+      cell(tr, String(c.days));
+      cell(tr, fmtMoney(c.startCapital));
+      cell(tr, fmtMoney(r.daily[r.daily.length - 1].equity - r.daily[r.daily.length - 1].withdrawn));
+      cell(tr, fmtPct(s.openUnrealizedPct) + ' (평가)', cls(s.openUnrealizedPct));
+      cell(tr, c.maxT.toFixed(2));
+      cell(tr, c.reverseEntries ? c.reverseEntries + '회' : '—');
+      cell(tr, fmtPct(c.lowRet * 100), c.lowRet < 0 ? 'down' : '');
+    }
+  }
+
+  // ---------- 다음 주문표 ----------
+  function renderOrders() {
+    const r = S.result, st = r.state, last = r.daily[r.daily.length - 1];
+    const ul = $('orders');
+    ul.replaceChildren();
+    $('orders-date').textContent = `${last.date} 장 마감 기준`;
+    const sb = $('orders-state');
+    sb.replaceChildren();
+    const items = [['모드', st.shares ? (st.mode === 'REVERSE' ? '리버스' : '일반') : '대기'], ['T', st.T.toFixed(4)],
+      ['보유', st.shares.toLocaleString() + '주'], ['평단', st.shares ? fmtMoney2(st.avg) : '—'], ['잔금', fmtMoney2(st.cash)]];
+    if (r.nextOrders.starPct != null) items.push(['별%', r.nextOrders.starPct.toFixed(2) + '%']);
+    for (const [k, v] of items) { const sp = document.createElement('span'); sp.append(k + ' '); const b = document.createElement('b'); b.textContent = v; sp.append(b); sb.append(sp); }
+    for (const line of E.orderLines(r.nextOrders)) {
+      const li = document.createElement('li');
+      li.textContent = line;
+      li.className = line.includes('매도') ? 'sell' : line.includes('매수') ? 'buy' : 'muted';
+      ul.append(li);
+    }
+    if (last.date < r.dataLast) {
+      const li = document.createElement('li');
+      li.className = 'muted';
+      li.textContent = `종료일(${last.date}) 다음 날에 걸었을 주문입니다. 실제 오늘 주문을 보려면 종료일을 비우세요.`;
+      ul.append(li);
+    }
+  }
+
+  function renderAll() { if (!S.result) return; renderSummary(); renderPeriods(); renderCharts(); renderCycles(); renderOrders(); }
+
+  // ---------- 이벤트 ----------
+  let timer = null;
+  const schedule = () => { clearTimeout(timer); timer = setTimeout(compute, 250); };
+  $('form').addEventListener('submit', (e) => { e.preventDefault(); compute(); });
+  $('form').addEventListener('input', schedule);
+  $('form').addEventListener('change', schedule);
+  $('f-ticker').addEventListener('change', () => {
+    const t = $('f-target'), other = $('f-ticker').value === 'TQQQ' ? 20 : 15;
+    if (t.value === '' || Number(t.value) === other) t.value = E.DEFAULT_TARGET[$('f-ticker').value];
+  });
+  $('p-since').addEventListener('click', () => { S.view.period = 'since'; renderPeriods(); });
+  $('p-recent').addEventListener('click', () => { S.view.period = 'recent'; renderPeriods(); });
+  $('t-log').addEventListener('click', () => { S.view.log = !S.view.log; renderCharts(); });
+  $('t-hold').addEventListener('click', () => { S.view.hold = !S.view.hold; renderCharts(); });
+  let lastW = 0;
+  new ResizeObserver(() => { const w = $('chart-eq').clientWidth; if (S.result && Math.abs(w - lastW) > 4) { lastW = w; renderCharts(); } }).observe($('chart-eq'));
+
+  restoreForm();
+  compute();
+})();
+</script>
+</body>
+</html>
