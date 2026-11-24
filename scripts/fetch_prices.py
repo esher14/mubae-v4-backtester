@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 from mubae import data  # noqa: E402
 
-TICKERS = ["TQQQ", "SOXL"]
+TICKERS = ["TQQQ", "SOXL", "QQQ"]  # QQQ는 단순 보유 비교용
 OUT = ROOT / "app" / "data"
 
 

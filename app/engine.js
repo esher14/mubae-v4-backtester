@@ -65,6 +65,10 @@
 
   function orderLines(o, nTiers = 5) {
     const out = [];
+    if (o.kind === 'FIRST') {
+      out.push(`[LOC 매수] 1회 매수금 $${o.amt.toFixed(2)} 전액을 종가에 매수 (첫 매수: 큰수 LOC + 추가 1주 주문)`);
+      return out;
+    }
     for (const [p, q, , lab] of o.buys) if (q > 0) out.push(`[LOC 매수] $${p.toFixed(2)} × ${q}주 (${lab})`);
     if (o.tierAmt > 0) {
       for (let k = 1; k <= nTiers; k++) out.push(`[LOC 매수] $${(o.tierAmt / (o.tierBase + k)).toFixed(2)} × 1주 (추가)`);
@@ -129,21 +133,28 @@
       const o = makeOrders(st, cfg, tick, sma5, capital);
       const modeBefore = st.mode, Tbefore = st.T;
       const C = b.close;
-      const events = [];
+      const events = [], fills = [];
+      const avgBefore = st.avg, sharesBefore = st.shares, cashBefore = st.cash;
       let realized = 0, soldLimit = false, soldLoc = false, soldMoc = false;
 
       if (o.limitSell && o.limitSell[1] > 0 && b.high >= o.limitSell[0]) {
         const [p, q] = o.limitSell;
-        realized += sell(q, p); soldLimit = true; events.push(`지정가매도 ${q}주 @${p.toFixed(2)}`);
+        const pnl = sell(q, p);
+        realized += pnl; soldLimit = true; events.push(`지정가매도 ${q}주 @${p.toFixed(2)}`);
+        fills.push({ side: 'sell', type: '지정가', label: '목표가', qty: q, price: p, pnl });
       }
       if (o.mocSell > 0 && st.shares > 0) {
         const q = Math.min(o.mocSell, st.shares);
-        realized += sell(q, C); soldMoc = true; events.push(`MOC매도 ${q}주 @${C.toFixed(2)}`);
+        const pnl = sell(q, C);
+        realized += pnl; soldMoc = true; events.push(`MOC매도 ${q}주 @${C.toFixed(2)}`);
+        fills.push({ side: 'sell', type: 'MOC', label: o.kind === 'REV_FIRST' ? '리버스 1일차' : '소진', qty: q, price: C, pnl });
       }
       for (const [p, q0, lab] of o.locSells) {
         if (q0 > 0 && st.shares > 0 && C >= p) {
           const q = Math.min(q0, st.shares);
-          realized += sell(q, C); soldLoc = true; events.push(`LOC매도(${lab}) ${q}주 @${C.toFixed(2)}`);
+          const pnl = sell(q, C);
+          realized += pnl; soldLoc = true; events.push(`LOC매도(${lab}) ${q}주 @${C.toFixed(2)}`);
+          fills.push({ side: 'sell', type: 'LOC', label: lab, qty: q, price: C, pnl });
         }
       }
       let bought = 0, tInc = 0;
@@ -152,13 +163,18 @@
         if (o.tierAmt > 0 && C <= o.tierAmt / (o.tierBase + 1)) bought += Math.floor(o.tierAmt / C) - o.tierBase;
         const affordable = C > 0 ? Math.floor(st.cash / (C * (1 + fee))) : 0;
         bought = Math.max(0, Math.min(bought, affordable));
-        if (bought > 0) { buy(bought, C); events.push(`LOC매수 ${bought}주 @${C.toFixed(2)}`); }
+        if (bought > 0) {
+          buy(bought, C); events.push(`LOC매수 ${bought}주 @${C.toFixed(2)}`);
+          const lab = o.kind === 'FIRST' ? '첫 매수' : o.kind === 'REV' ? '쿼터매수' : o.kind === 'BACK' ? '별지점'
+            : tInc >= 1 ? '별지점+평단' : '별지점(절반)';
+          fills.push({ side: 'buy', type: 'LOC', label: lab, qty: bought, price: C, pnl: 0 });
+        }
       }
 
       if (o.kind === 'FIRST') {
         if (bought > 0) {
           st.T = 1; st.mode = NORMAL;
-          cyc = { start: b.date, startCapital: capital, maxT: 1, reverseEntries: 0, days: 0, peak: capital, mdd: 0, lowRet: 0 };
+          cyc = { start: b.date, startIdx: daily.length, startCapital: capital, maxT: 1, reverseEntries: 0, days: 0, peak: capital, mdd: 0, lowRet: 0 };
           events.push('사이클 시작');
         }
       } else if (o.kind === 'FRONT' || o.kind === 'BACK') {
@@ -177,7 +193,7 @@
       let endedCycle = null;
       if (cycleEnd) {
         cyc.days += 1;
-        Object.assign(cyc, { end: b.date, endCash: st.cash, profit: st.cash - cyc.startCapital,
+        Object.assign(cyc, { end: b.date, endIdx: daily.length, endCash: st.cash, profit: st.cash - cyc.startCapital,
           retPct: (st.cash / cyc.startCapital - 1) * 100, finalT: Tbefore });
         cycles.push(cyc); endedCycle = cyc; cyc = null;
         st.T = 0; st.mode = NORMAL; st.revFirst = false;
@@ -210,7 +226,8 @@
       }
       daily.push({ date: b.date, close: C, kind: o.kind, mode: st.mode, modeBefore, T: st.T, Tbefore, starPct: o.starPct ?? null,
         star: o.star ?? null, amt: o.amt, shares: st.shares, avg: st.avg, cash: st.cash, withdrawn, equity, dd, realized,
-        events, cycleEnd: endedCycle });
+        events, cycleEnd: endedCycle, fills, orders: o, high: b.high, low: b.low, open: b.open,
+        avgBefore, sharesBefore, cashBefore, limitPrice: o.limitSell ? o.limitSell[0] : null });
     }
 
     const last = bars[iEnd], firstDate = bars[iStart].date;

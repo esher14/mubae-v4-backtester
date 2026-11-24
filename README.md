@@ -8,6 +8,7 @@
 ## 웹 페이지 (`app/`)
 
 - `app/index.html`: 화면. 종목·분할수·목표수익률·기간·원금을 넣으면 기간 수익률, MDD, 사이클 종료 시점, 다음 거래일 주문표를 보여줍니다.
+  종목 단순 보유·QQQ 단순 보유와 평가금·낙폭을 비교하고, 사이클을 누르면 날짜별 체결 내역과 T·평단·별지점 흐름을 볼 수 있습니다.
 - `app/engine.js`: 백테스트 엔진(브라우저용). `mubae/engine.py`와 같은 결과를 내는지 `python test_js_engine.py`로 검증합니다.
 - `app/data/*.csv`: 가격 데이터. GitHub Actions(`.github/workflows/update-and-deploy.yml`)가 평일 매일 오전 8시 17분(한국시간)에
   `scripts/fetch_prices.py`로 Yahoo Finance 일봉을 받아 새로 만들고 GitHub Pages에 배포합니다.

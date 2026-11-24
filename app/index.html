@@ -12,7 +12,7 @@
 :root {
   --bg: #f4f6f8; --panel: #ffffff; --ink: #15202b; --muted: #5b6977; --line: #dde3ea;
   --accent: #0f6e66; --accent-soft: #e3f1ef; --up: #d23b3b; --down: #2c63c9; --rev: rgba(226, 150, 40, 0.16); --rev-ink: #a5670f;
-  --hold: #9aa6b2;
+  --hold: #9aa6b2; --qqq: #7b5ad6;
   --font-ui: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
   --font-num: "IBM Plex Mono", ui-monospace, "Consolas", monospace;
   --r: 10px;
@@ -20,11 +20,11 @@
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
   --bg: #0e141a; --panel: #161e26; --ink: #e4ebf2; --muted: #93a2b1; --line: #29343f;
   --accent: #3cb5a8; --accent-soft: #15302d; --up: #ff6a6a; --down: #6d9cff; --rev: rgba(233, 162, 59, 0.13); --rev-ink: #e8a74a;
-  --hold: #5f6c79; color-scheme: dark; } }
+  --hold: #5f6c79; --qqq: #a98bff; color-scheme: dark; } }
 :root[data-theme="dark"] {
   --bg: #0e141a; --panel: #161e26; --ink: #e4ebf2; --muted: #93a2b1; --line: #29343f;
   --accent: #3cb5a8; --accent-soft: #15302d; --up: #ff6a6a; --down: #6d9cff; --rev: rgba(233, 162, 59, 0.13); --rev-ink: #e8a74a;
-  --hold: #5f6c79; color-scheme: dark; }
+  --hold: #5f6c79; --qqq: #a98bff; color-scheme: dark; }
 html, body { margin: 0; }
 [hidden] { display: none !important; }
 body { background: var(--bg); color: var(--ink); font-family: var(--font-ui); font-size: 14px; line-height: 1.5; }
@@ -113,6 +113,25 @@ details { font-size: 12.5px; color: var(--muted); }
 details summary { cursor: pointer; color: var(--ink); font-weight: 500; }
 details ul { padding-left: 1.2em; margin: 8px 0 0; line-height: 1.7; }
 .empty { padding: 30px 0; text-align: center; color: var(--muted); }
+.sw.qqq { background: var(--qqq); }
+.sw.avg { background: none; border-top: 2px dashed var(--accent); height: 0; }
+.sw.star { background: none; border-top: 2px dotted var(--rev-ink); height: 0; }
+.tri { width: 0; height: 0; display: inline-block; border-left: 5px solid transparent; border-right: 5px solid transparent; }
+.tri.buy { border-bottom: 8px solid var(--up); } .tri.sell { border-top: 8px solid var(--down); }
+table.cmp td.l { font-family: var(--font-ui); }
+tr.click { cursor: pointer; }
+tr.click:hover td { background: var(--accent-soft); }
+tr.click:focus-visible td { outline: 2px solid var(--accent); outline-offset: -2px; }
+tr.sel td { background: var(--accent-soft); font-weight: 600; }
+.hint { font-size: 12px; color: var(--muted); margin: 0; }
+.fill { display: block; } .fill.buy { color: var(--up); } .fill.sell { color: var(--down); }
+.badge { display: inline-block; font-family: var(--font-ui); font-size: 11px; font-weight: 600; padding: 0 6px; border-radius: 999px; margin-left: 4px; background: var(--bg); color: var(--muted); }
+.badge.rev { background: var(--rev); color: var(--rev-ink); } .badge.end { background: var(--accent-soft); color: var(--accent); }
+tr.sub td { background: var(--bg); white-space: normal; text-align: left; font-size: 12px; color: var(--muted); }
+tr.sub ul { margin: 2px 0; padding-left: 1.1em; }
+.chart.cd { min-height: 260px; } .chart.tt { min-height: 120px; }
+.xbtn { font: inherit; font-size: 12.5px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 7px; padding: 4px 10px; cursor: pointer; }
+.navbtns { display: flex; gap: 6px; }
 </style>
 
 </head>
@@ -198,12 +217,14 @@ details ul { padding-left: 1.2em; margin: 8px 0 0; line-height: 1.7; }
         <h2>평가금 추이와 사이클 종료 시점</h2>
         <div class="toggles">
           <button type="button" class="tg" id="t-log" aria-pressed="true">로그 축</button>
-          <button type="button" class="tg" id="t-hold" aria-pressed="true">단순 보유 비교</button>
+          <button type="button" class="tg" id="t-hold" aria-pressed="true"><span id="t-hold-lbl">종목</span> 보유</button>
+          <button type="button" class="tg" id="t-qqq" aria-pressed="true">QQQ 보유</button>
         </div>
       </div>
       <div class="legend">
         <span><i class="sw"></i>무매 평가금</span>
-        <span id="lg-hold"><i class="sw hold"></i>단순 보유</span>
+        <span id="lg-hold"><i class="sw hold"></i><span id="lg-hold-lbl">종목</span> 단순 보유</span>
+        <span id="lg-qqq"><i class="sw qqq"></i>QQQ 단순 보유</span>
         <span><i class="dot up"></i>사이클 종료(수익)</span>
         <span><i class="dot down"></i>사이클 종료(손실)</span>
         <span><i class="sw rev"></i>리버스 모드 구간</span>
@@ -211,6 +232,13 @@ details ul { padding-left: 1.2em; margin: 8px 0 0; line-height: 1.7; }
       <div class="chart" id="chart-eq"></div>
       <div class="muted" style="font-size:12px">고점 대비 낙폭</div>
       <div class="chart dd" id="chart-dd"></div>
+      <div class="tablewrap">
+        <table class="cmp">
+          <thead><tr><th class="l">같은 기간, 같은 원금</th><th>최종 평가금</th><th>수익률</th><th>CAGR</th><th>MDD</th></tr></thead>
+          <tbody id="cmp-body"></tbody>
+        </table>
+      </div>
+      <p class="hint">단순 보유는 시작일 종가에 원금 전부를 사서 끝까지 들고 있는 경우입니다(배당 미반영).</p>
     </section>
 
     <section class="card" id="cycles">
@@ -218,10 +246,47 @@ details ul { padding-left: 1.2em; margin: 8px 0 0; line-height: 1.7; }
         <h2>사이클 기록</h2>
         <span class="muted" id="cycles-note" style="font-size:12.5px">—</span>
       </div>
+      <p class="hint">행을 누르면 그 사이클의 매매기록과 진행 흐름을 볼 수 있습니다.</p>
       <div class="tablewrap tall">
         <table>
           <thead><tr><th>#</th><th class="l">시작일</th><th class="l">종료일</th><th>거래일</th><th>시작 금액</th><th>종료 금액</th><th>수익률</th><th>최대 T</th><th>리버스</th><th>사이클 중 최저</th></tr></thead>
           <tbody id="cycles-body"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card" id="cycle-detail" hidden>
+      <div class="cardhead">
+        <h2 id="cd-title">사이클 상세</h2>
+        <div class="navbtns">
+          <button type="button" class="xbtn" id="cd-prev" aria-label="이전 사이클">← 이전</button>
+          <button type="button" class="xbtn" id="cd-next" aria-label="다음 사이클">다음 →</button>
+          <button type="button" class="xbtn" id="cd-close">닫기</button>
+        </div>
+      </div>
+      <div class="statebar" id="cd-stats"></div>
+      <div class="legend">
+        <span><i class="sw"></i>종가</span>
+        <span><i class="sw avg"></i>평단</span>
+        <span><i class="sw star"></i>별지점(그날 기준가)</span>
+        <span><i class="tri buy"></i>매수</span>
+        <span><i class="tri sell"></i>매도</span>
+        <span><i class="sw rev"></i>리버스 모드</span>
+      </div>
+      <div class="chart cd" id="cd-chart"></div>
+      <div class="muted" style="font-size:12px">T 진행 (점선: 후반전 시작 n/2, 소진 기준 n−1)</div>
+      <div class="chart tt" id="cd-tchart"></div>
+      <div class="cardhead">
+        <h2 style="font-size:14px">날짜별 매매기록</h2>
+        <div class="toggles">
+          <button type="button" class="tg" id="cd-only" aria-pressed="false">체결 있는 날만</button>
+        </div>
+      </div>
+      <p class="hint">행을 누르면 그날 걸었던 주문표(전날 장 마감 기준)를 펼쳐 봅니다.</p>
+      <div class="tablewrap tall">
+        <table>
+          <thead><tr><th class="l">날짜</th><th>종가</th><th class="l">모드</th><th>T</th><th>별% · 기준가</th><th class="l">체결</th><th>실현손익</th><th>보유</th><th>평단</th><th>잔금</th><th>사이클 손익</th></tr></thead>
+          <tbody id="cd-body"></tbody>
         </table>
       </div>
     </section>
@@ -258,10 +323,10 @@ details ul { padding-left: 1.2em; margin: 8px 0 0; line-height: 1.7; }
 (function () {
   const E = window.MubaeEngine;
   const $ = (id) => document.getElementById(id);
-  const S = { bars: {}, result: null, view: { log: true, hold: true, period: 'since' } };
+  const S = { bars: {}, result: null, view: { log: true, hold: true, qqq: true, period: 'since', cdOnly: false }, cd: null };
   const STORE_KEY = 'mubae-backtester-inputs-v1';
-  const fmtMoney = (v) => '$' + d3.format(',.0f')(v);
-  const fmtMoney2 = (v) => '$' + d3.format(',.2f')(v);
+  const fmtMoney = (v) => (v < 0 ? '-$' : '$') + d3.format(',.0f')(Math.abs(v));
+  const fmtMoney2 = (v) => (v < 0 ? '-$' : '$') + d3.format(',.2f')(Math.abs(v));
   const fmtPct = (v, d = 2) => (v > 0 ? '+' : '') + v.toFixed(d) + '%';
   const cls = (v) => (v > 0 ? 'up' : v < 0 ? 'down' : '');
   const parseDate = d3.utcParse('%Y-%m-%d');
@@ -334,22 +399,40 @@ details ul { padding-left: 1.2em; margin: 8px 0 0; line-height: 1.7; }
     try { r = E.run(c, bars); } catch (e) { return showMsg(e.message); }
     showMsg('');
     saveForm(c);
-    r.hold = holdSeries(bars, r);
+    r.hold = holdByDate(bars, r.daily, r.cfg.principal);
+    let qbars = null;
+    try { qbars = await loadBars('QQQ'); } catch (e) { qbars = null; }
+    if (seq !== runSeq) return;
+    r.qqq = qbars ? holdByDate(qbars, r.daily, r.cfg.principal) : null;
     r.dataLast = last;
     S.result = r;
+    S.cd = null;
     renderAll();
     showMeta();
   }
 
-  function holdSeries(bars, r) {
-    const i0 = bars.findIndex((b) => b.date === r.daily[0].date);
-    let sh = r.cfg.principal / bars[i0].close;
+  // 시작일 종가에 원금 전부를 사서 들고 있는 평가금(분할은 수량 보정). 날짜로 맞추므로 다른 종목에도 쓴다.
+  function holdByDate(bars, daily, principal) {
+    let k = 0;
+    while (k < bars.length && bars[k].date < daily[0].date) k++;
+    if (k >= bars.length) return null;
+    const k0 = k;
+    let sh = principal / bars[k0].close, px = bars[k0].close;
     const out = [];
-    for (let i = i0; i < i0 + r.daily.length; i++) {
-      if (i > i0 && bars[i].split !== 1) sh *= bars[i].split;
-      out.push(sh * bars[i].close);
+    for (const d of daily) {
+      while (k < bars.length && bars[k].date <= d.date) {
+        if (k > k0 && bars[k].split !== 1) sh *= bars[k].split;
+        px = bars[k].close; k++;
+      }
+      out.push(sh * px);
     }
     return out;
+  }
+  function seriesStats(eq, principal, years) {
+    let pk = -Infinity, mdd = 0;
+    const dd = eq.map((v) => { pk = Math.max(pk, v); const x = v / pk - 1; mdd = Math.min(mdd, x); return x * 100; });
+    const fin = eq[eq.length - 1];
+    return { dd, final: fin, ret: (fin / principal - 1) * 100, cagr: years >= 1 ? (Math.pow(fin / principal, 1 / years) - 1) * 100 : null, mdd: mdd * 100 };
   }
 
   // ---------- 요약 ----------
@@ -467,17 +550,25 @@ details ul { padding-left: 1.2em; margin: 8px 0 0; line-height: 1.7; }
 
   let hoverIdx = null;
   function renderCharts() {
-    const r = S.result, daily = r.daily, hold = r.hold, view = S.view;
+    const r = S.result, daily = r.daily, view = S.view;
+    const tk = r.stats.ticker;
+    const showHold = view.hold && !!r.hold, showQqq = view.qqq && !!r.qqq;
+    const hold = r.hold || [], qqq = r.qqq || [];
     $('t-log').setAttribute('aria-pressed', view.log);
     $('t-hold').setAttribute('aria-pressed', view.hold);
-    $('lg-hold').hidden = !view.hold;
+    $('t-qqq').setAttribute('aria-pressed', view.qqq);
+    $('t-qqq').disabled = !r.qqq;
+    $('t-hold-lbl').textContent = tk; $('lg-hold-lbl').textContent = tk;
+    $('lg-hold').hidden = !showHold;
+    $('lg-qqq').hidden = !showQqq;
+    renderCompare();
     const elE = $('chart-eq'), elD = $('chart-dd');
     elE.replaceChildren(); elD.replaceChildren();
     const W = Math.max(280, elE.clientWidth);
     const H = 300, H2 = 130, top = 10, bot = H - 24, bot2 = H2 - 22;
     const xs = daily.map((d) => parseDate(d.date));
 
-    const vals = daily.map((d) => d.equity).concat(view.hold ? hold : []);
+    const vals = daily.map((d) => d.equity).concat(showHold ? hold : [], showQqq ? qqq : []);
     const ext = d3.extent(vals);
     const y = view.log ? d3.scaleLog([Math.max(1, ext[0] * 0.92), ext[1] * 1.08], [bot, top])
       : d3.scaleLinear([0, ext[1] * 1.04], [bot, top]).nice();
@@ -486,9 +577,9 @@ details ul { padding-left: 1.2em; margin: 8px 0 0; line-height: 1.7; }
 
     // 낙폭 차트(먼저 축 폭을 재서 두 차트의 왼쪽 여백을 맞춘다)
     const dds = daily.map((d) => d.dd * 100);
-    const holdDd = [];
-    { let pk = -Infinity; for (const v of hold) { pk = Math.max(pk, v); holdDd.push((v / pk - 1) * 100); } }
-    const ddMin = Math.min(d3.min(dds), view.hold ? d3.min(holdDd) : 0, -1);
+    const holdDd = showHold ? seriesStats(hold, r.cfg.principal, 0).dd : [];
+    const qqqDd = showQqq ? seriesStats(qqq, r.cfg.principal, 0).dd : [];
+    const ddMin = Math.min(d3.min(dds), showHold ? d3.min(holdDd) : 0, showQqq ? d3.min(qqqDd) : 0, -1);
     const y2 = d3.scaleLinear([ddMin * 1.05, 0], [bot2, 6]).nice();
 
     const svg = d3.select(elE).append('svg').attr('viewBox', `0 0 ${W} ${H}`).attr('height', H)
@@ -521,9 +612,13 @@ details ul { padding-left: 1.2em; margin: 8px 0 0; line-height: 1.7; }
     }
 
     const ln = d3.line().x((d, i) => x(xs[i])).y((d) => d);
-    if (view.hold) {
+    if (showHold) {
       svg.append('path').attr('d', ln(hold.map((v) => y(v)))).attr('fill', 'none').style('stroke', 'var(--hold)').attr('stroke-width', 1.2);
       svg2.append('path').attr('d', ln(holdDd.map((v) => y2(v)))).attr('fill', 'none').style('stroke', 'var(--hold)').attr('stroke-width', 1);
+    }
+    if (showQqq) {
+      svg.append('path').attr('d', ln(qqq.map((v) => y(v)))).attr('fill', 'none').style('stroke', 'var(--qqq)').attr('stroke-width', 1.3);
+      svg2.append('path').attr('d', ln(qqqDd.map((v) => y2(v)))).attr('fill', 'none').style('stroke', 'var(--qqq)').attr('stroke-width', 1.1);
     }
     svg.append('path').attr('d', ln(daily.map((d) => y(d.equity)))).attr('fill', 'none').style('stroke', 'var(--ink)').attr('stroke-width', 1.6).attr('stroke-linejoin', 'round');
     const area = d3.area().x((d, i) => x(xs[i])).y0(y2(0)).y1((d) => y2(d));
@@ -556,9 +651,11 @@ details ul { padding-left: 1.2em; margin: 8px 0 0; line-height: 1.7; }
       dot.attr('cx', px).attr('cy', y(d.equity)).attr('visibility', 'visible');
       tip.selectAll('*').remove();
       tip.append('div').attr('class', 'd').text(d.date);
-      const rows = [['평가금', fmtMoney(d.equity)], ['수익률', fmtPct((d.equity / r.cfg.principal - 1) * 100)], ['낙폭', (d.dd * 100).toFixed(2) + '%'],
-        ['종가', fmtMoney2(d.close)], ['모드 · T', `${d.mode === 'REVERSE' ? '리버스' : '일반'} · ${d.T.toFixed(3)}`], ['보유', `${d.shares.toLocaleString()}주`]];
-      if (view.hold) rows.splice(2, 0, ['단순 보유', fmtMoney(hold[i])]);
+      const p0 = r.cfg.principal;
+      const rows = [['무매 평가금', `${fmtMoney(d.equity)} (${fmtPct((d.equity / p0 - 1) * 100, 1)})`], ['무매 낙폭', (d.dd * 100).toFixed(2) + '%']];
+      if (showHold) rows.push([`${tk} 보유`, `${fmtMoney(hold[i])} (${fmtPct((hold[i] / p0 - 1) * 100, 1)})`], [`${tk} 낙폭`, holdDd[i].toFixed(2) + '%']);
+      if (showQqq) rows.push(['QQQ 보유', `${fmtMoney(qqq[i])} (${fmtPct((qqq[i] / p0 - 1) * 100, 1)})`], ['QQQ 낙폭', qqqDd[i].toFixed(2) + '%']);
+      rows.push([`${tk} 종가`, fmtMoney2(d.close)], ['모드 · T', `${d.mode === 'REVERSE' ? '리버스' : '일반'} · ${d.T.toFixed(3)}`], ['보유', `${d.shares.toLocaleString()}주`]);
       for (const [k, v] of rows) { const rr = tip.append('div').attr('class', 'r'); rr.append('span').text(k); rr.append('b').text(v); }
       const ev = d.events.slice();
       if (d.cycleEnd) ev.unshift(`사이클 #${r.cycles.indexOf(d.cycleEnd) + 1} 종료: ${fmtPct(d.cycleEnd.retPct)} (${d.cycleEnd.days}거래일)`);
@@ -576,6 +673,23 @@ details ul { padding-left: 1.2em; margin: 8px 0 0; line-height: 1.7; }
     }
   }
 
+  function renderCompare() {
+    const r = S.result, s = r.stats, tb = $('cmp-body');
+    tb.replaceChildren();
+    const rows = [['무한매수법', r.daily.map((d) => d.equity)]];
+    if (r.hold) rows.push([`${s.ticker} 단순 보유`, r.hold]);
+    if (r.qqq) rows.push(['QQQ 단순 보유', r.qqq]);
+    for (const [name, eq] of rows) {
+      const st = seriesStats(eq, s.principal, s.years);
+      const tr = tb.insertRow();
+      cell(tr, name, 'l lbl');
+      cell(tr, fmtMoney(st.final));
+      cell(tr, fmtPct(st.ret), cls(st.ret));
+      cell(tr, st.cagr == null ? '—' : fmtPct(st.cagr), st.cagr == null ? 'muted' : cls(st.cagr));
+      cell(tr, st.mdd.toFixed(2) + '%', st.mdd < 0 ? 'down' : '');
+    }
+  }
+
   // ---------- 사이클 표 ----------
   function renderCycles() {
     const r = S.result, s = r.stats, tb = $('cycles-body');
@@ -584,8 +698,17 @@ details ul { padding-left: 1.2em; margin: 8px 0 0; line-height: 1.7; }
     $('cycles-note').textContent = r.cycles.length
       ? `평균 ${fmtPct(d3.mean(rets))} · 최고 ${fmtPct(d3.max(rets))} · 최저 ${fmtPct(d3.min(rets))} · 평균 ${d3.mean(r.cycles, (c) => c.days).toFixed(1)}거래일`
       : '완료된 사이클이 없습니다';
+    const clickable = (tr, k) => {
+      tr.className = (tr.className + ' click').trim();
+      tr.tabIndex = 0;
+      tr.dataset.k = k;
+      tr.setAttribute('aria-label', k === 'open' ? '진행 중 사이클 상세 보기' : `사이클 ${k + 1} 상세 보기`);
+      tr.addEventListener('click', () => openCycle(k));
+      tr.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openCycle(k); } });
+    };
     r.cycles.forEach((c, k) => {
       const tr = tb.insertRow();
+      clickable(tr, k);
       cell(tr, String(k + 1));
       cell(tr, c.start, 'l'); cell(tr, c.end, 'l');
       cell(tr, String(c.days));
@@ -598,6 +721,7 @@ details ul { padding-left: 1.2em; margin: 8px 0 0; line-height: 1.7; }
     if (s.openCycle) {
       const c = s.openCycle, tr = tb.insertRow();
       tr.className = 'open';
+      clickable(tr, 'open');
       cell(tr, '진행');
       cell(tr, c.start, 'l'); cell(tr, '진행 중', 'l lbl');
       cell(tr, String(c.days));
@@ -608,6 +732,214 @@ details ul { padding-left: 1.2em; margin: 8px 0 0; line-height: 1.7; }
       cell(tr, c.reverseEntries ? c.reverseEntries + '회' : '—');
       cell(tr, fmtPct(c.lowRet * 100), c.lowRet < 0 ? 'down' : '');
     }
+  }
+
+  // ---------- 사이클 상세 ----------
+  function cycleList() {
+    const r = S.result, list = r.cycles.map((c, k) => ({ key: k, c, i0: c.startIdx, i1: c.endIdx, open: false }));
+    if (r.stats.openCycle) list.push({ key: 'open', c: r.stats.openCycle, i0: r.stats.openCycle.startIdx, i1: r.daily.length - 1, open: true });
+    return list;
+  }
+  function openCycle(k) {
+    S.cd = k;
+    renderCycleDetail();
+    const sec = $('cycle-detail');
+    sec.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
+  }
+  function closeCycle() {
+    const k = S.cd;
+    S.cd = null;
+    $('cycle-detail').hidden = true;
+    markSelected();
+    const row = document.querySelector(`#cycles-body tr[data-k="${k}"]`);
+    if (row) row.focus();
+  }
+  function markSelected() {
+    document.querySelectorAll('#cycles-body tr').forEach((tr) => tr.classList.toggle('sel', S.cd != null && tr.dataset.k === String(S.cd)));
+  }
+  function stepCycle(dir) {
+    const list = cycleList(), pos = list.findIndex((x) => String(x.key) === String(S.cd));
+    const nx = list[pos + dir];
+    if (nx) { S.cd = nx.key; renderCycleDetail(); }
+  }
+
+  function renderCycleDetail() {
+    const sec = $('cycle-detail');
+    if (S.cd == null || !S.result) { sec.hidden = true; return; }
+    const r = S.result, daily = r.daily, n = r.cfg.n;
+    const list = cycleList(), pos = list.findIndex((x) => String(x.key) === String(S.cd));
+    if (pos < 0) { sec.hidden = true; S.cd = null; return; }
+    const it = list[pos], c = it.c, days = daily.slice(it.i0, it.i1 + 1);
+    sec.hidden = false;
+    markSelected();
+    $('cd-prev').disabled = pos === 0;
+    $('cd-next').disabled = pos === list.length - 1;
+
+    const lastD = days[days.length - 1];
+    const endVal = it.open ? lastD.cash + lastD.shares * lastD.close : c.endCash;
+    const ret = (endVal / c.startCapital - 1) * 100;
+    $('cd-title').textContent = `${it.open ? '진행 중 사이클' : `사이클 #${it.key + 1}`} · ${c.start} ~ ${it.open ? lastD.date + ' (진행 중)' : c.end}`;
+    let nb = 0, ns = 0, qb = 0, qs = 0, pnl = 0, revDays = 0;
+    for (const d of days) {
+      for (const f of d.fills) { if (f.side === 'buy') { nb++; qb += f.qty; } else { ns++; qs += f.qty; pnl += f.pnl; } }
+      if (d.modeBefore === 'REVERSE') revDays++;
+    }
+    const sb = $('cd-stats');
+    sb.replaceChildren();
+    const items = [['거래일', days.length + '일'], ['시작 금액', fmtMoney(c.startCapital)], [it.open ? '현재 평가' : '종료 금액', fmtMoney(endVal)],
+      ['수익률', fmtPct(ret) + (it.open ? ' (평가)' : '')], ['최대 T', c.maxT.toFixed(2)], ['리버스', c.reverseEntries ? `${c.reverseEntries}회 · ${revDays}일` : '없음'],
+      ['매수', `${nb}회 · ${qb.toLocaleString()}주`], ['매도', `${ns}회 · ${qs.toLocaleString()}주`], ['실현손익', fmtMoney2(pnl).replace('$-', '-$')],
+      ['사이클 중 최저', fmtPct(c.lowRet * 100)]];
+    for (const [k, v] of items) { const sp = document.createElement('span'); sp.append(k + ' '); const b = document.createElement('b'); b.textContent = v; sp.append(b); sb.append(sp); }
+
+    renderCycleCharts(days, n);
+    renderCycleTable(days, c);
+  }
+
+  function renderCycleCharts(days, n) {
+    const el = $('cd-chart'), elT = $('cd-tchart');
+    el.replaceChildren(); elT.replaceChildren();
+    const W = Math.max(280, el.clientWidth), H = 260, H2 = 120, top = 10, bot = H - 24, bot2 = H2 - 22;
+    const xs = days.map((d) => parseDate(d.date));
+    const pts = [];
+    days.forEach((d) => { pts.push(d.close); if (d.avgBefore > 0) pts.push(d.avgBefore); if (d.avg > 0) pts.push(d.avg); if (d.star) pts.push(d.star); });
+    const ext = d3.extent(pts);
+    const pad = (ext[1] - ext[0]) * 0.08 || ext[0] * 0.05;
+    const y = d3.scaleLinear([ext[0] - pad, ext[1] + pad], [bot, top]).nice();
+    const tMax = Math.max(n, d3.max(days, (d) => d.T));
+    const y2 = d3.scaleLinear([0, tMax], [bot2, 6]).nice();
+    const svg = d3.select(el).append('svg').attr('viewBox', `0 0 ${W} ${H}`).attr('height', H).attr('role', 'img').attr('aria-label', '사이클 동안의 종가, 평단, 별지점과 매매 시점');
+    const svg2 = d3.select(elT).append('svg').attr('viewBox', `0 0 ${W} ${H2}`).attr('height', H2).attr('role', 'img').attr('aria-label', '사이클 동안의 T 진행');
+    const a1 = axisLeftMeasured(svg, y, y.ticks(5), (v) => '$' + d3.format(',.2~f')(v));
+    const a2 = axisLeftMeasured(svg2, y2, y2.ticks(4), (v) => String(v));
+    const ml = Math.max(a1.ml, a2.ml), mr = 12;
+    a1.g.attr('transform', `translate(${ml},0)`); a2.g.attr('transform', `translate(${ml},0)`);
+    // 일 단위 위치(거래일 순번)로 그려 휴장일 빈칸 없이 촘촘히 보이게 한다
+    const x = d3.scaleLinear([0, Math.max(1, days.length - 1)], [ml + 6, W - mr - 6]);
+    const nT = Math.max(2, Math.min(days.length, Math.floor((W - ml - mr) / 80)));
+    const tickIdx = d3.range(nT).map((k) => Math.round(k * (days.length - 1) / Math.max(1, nT - 1)));
+    const fmtMD = d3.utcFormat(days.length > 250 ? '%y-%m' : '%m-%d');
+    for (const [s, yy, b, ticks, h] of [[svg, y, bot, y.ticks(5), H], [svg2, y2, bot2, y2.ticks(4), H2]]) {
+      s.insert('g', ':first-child').attr('class', 'grid').attr('transform', `translate(${ml},0)`)
+        .call(d3.axisLeft(yy).tickValues(ticks).tickSize(-(W - ml - mr)).tickFormat(''));
+      const step = days.length > 1 ? x(1) - x(0) : 10;
+      s.insert('g', '.grid + *').selectAll('rect').data(days.map((d, i) => [d, i]).filter(([d]) => d.modeBefore === 'REVERSE' || d.mode === 'REVERSE'))
+        .join('rect').attr('x', ([, i]) => x(i) - step / 2).attr('width', step).attr('y', yy === y ? top : 6)
+        .attr('height', yy === y ? bot - top : bot2 - 6).style('fill', 'var(--rev)');
+      s.append('g').attr('transform', `translate(0,${b})`)
+        .call(d3.axisBottom(x).tickValues(tickIdx).tickFormat((i) => fmtMD(xs[i])).tickSizeOuter(0));
+    }
+    const line = (acc) => d3.line().defined((d) => acc(d) > 0).x((d, i) => x(i)).y((d) => y(acc(d)));
+    svg.append('path').attr('d', line((d) => d.star || 0)(days)).attr('fill', 'none').style('stroke', 'var(--rev-ink)').attr('stroke-width', 1.4).attr('stroke-dasharray', '1.5 3').attr('stroke-linecap', 'round');
+    svg.append('path').attr('d', d3.line().defined((d) => d.avgBefore > 0).x((d, i) => x(i)).y((d) => y(d.avgBefore)).curve(d3.curveStepAfter)(days))
+      .attr('fill', 'none').style('stroke', 'var(--accent)').attr('stroke-width', 1.5).attr('stroke-dasharray', '5 3');
+    svg.append('path').attr('d', line((d) => d.close)(days)).attr('fill', 'none').style('stroke', 'var(--ink)').attr('stroke-width', 1.6);
+    const marks = [];
+    days.forEach((d, i) => d.fills.forEach((f) => marks.push({ i, f })));
+    const tri = d3.symbol().type(d3.symbolTriangle).size(60);
+    svg.append('g').selectAll('path').data(marks).join('path').attr('d', tri)
+      .attr('transform', (m) => `translate(${x(m.i)},${y(m.f.price) + (m.f.side === 'buy' ? 9 : -9)}) rotate(${m.f.side === 'buy' ? 0 : 180})`)
+      .style('fill', (m) => (m.f.side === 'buy' ? 'var(--up)' : 'var(--down)'));
+    // T 차트
+    for (const [lv, lab] of [[n / 2, '후반전'], [n - 1, '소진']]) {
+      svg2.append('line').attr('x1', ml).attr('x2', W - mr).attr('y1', y2(lv)).attr('y2', y2(lv)).style('stroke', 'var(--muted)').attr('stroke-dasharray', '4 3').attr('stroke-opacity', 0.7);
+      svg2.append('text').attr('x', W - mr).attr('y', y2(lv) - 3).attr('text-anchor', 'end').style('fill', 'var(--muted)').style('font-size', '10.5px').text(`${lab} ${lv}`);
+    }
+    svg2.append('path').attr('d', d3.line().x((d, i) => x(i)).y((d) => y2(d.T)).curve(d3.curveStepAfter)(days))
+      .attr('fill', 'none').style('stroke', 'var(--accent)').attr('stroke-width', 1.6);
+
+    // 호버
+    const tip = d3.select(el).append('div').attr('class', 'tip').style('display', 'none');
+    const cur = [svg.append('line').attr('y1', top).attr('y2', bot), svg2.append('line').attr('y1', 6).attr('y2', bot2)]
+      .map((l) => l.style('stroke', 'var(--muted)').attr('stroke-dasharray', '3 3').attr('visibility', 'hidden'));
+    function show(mx) {
+      const i = Math.max(0, Math.min(days.length - 1, Math.round(x.invert(mx))));
+      const d = days[i], px = x(i);
+      cur.forEach((l) => l.attr('x1', px).attr('x2', px).attr('visibility', 'visible'));
+      tip.selectAll('*').remove();
+      tip.append('div').attr('class', 'd').text(`${d.date} · ${i + 1}일째`);
+      const rows = [['종가', fmtMoney2(d.close)], ['평단(매매 전)', d.avgBefore > 0 ? fmtMoney2(d.avgBefore) : '—'],
+        [d.modeBefore === 'REVERSE' ? '별지점(5일 평균)' : '별지점', d.star ? fmtMoney2(d.star) : '—'],
+        ['T', `${d.Tbefore.toFixed(3)} → ${d.T.toFixed(3)}`], ['보유', `${d.sharesBefore.toLocaleString()} → ${d.shares.toLocaleString()}주`]];
+      for (const [k, v] of rows) { const rr = tip.append('div').attr('class', 'r'); rr.append('span').text(k); rr.append('b').text(v); }
+      const ev = d.fills.map(fillText).concat(d.events.filter((e) => !/매수|매도/.test(e)));
+      if (ev.length) tip.append('div').attr('class', 'ev').text(ev.join(' · '));
+      tip.style('display', 'block');
+      const sc = el.clientWidth / W, tw = tip.node().offsetWidth;
+      let left = px * sc + 14;
+      if (left + tw > el.clientWidth) left = px * sc - tw - 14;
+      tip.style('left', Math.max(0, left) + 'px');
+    }
+    function hide() { tip.style('display', 'none'); cur.forEach((l) => l.attr('visibility', 'hidden')); }
+    for (const [s, h] of [[svg, H], [svg2, H2]]) {
+      s.append('rect').attr('x', ml).attr('y', 0).attr('width', W - ml - mr).attr('height', h).attr('fill', 'transparent')
+        .on('pointermove', (ev) => show(d3.pointer(ev)[0])).on('pointerleave', hide);
+    }
+  }
+
+  function fillText(f) {
+    return `${f.side === 'buy' ? '매수' : '매도'} ${f.qty.toLocaleString()}주 @${f.price.toFixed(2)} (${f.type} · ${f.label})`;
+  }
+  function modeLabel(m) { return m === 'REVERSE' ? '리버스' : '일반'; }
+
+  function renderCycleTable(days, c) {
+    const tb = $('cd-body');
+    tb.replaceChildren();
+    $('cd-only').setAttribute('aria-pressed', S.view.cdOnly);
+    days.forEach((d, i) => {
+      const hasFill = d.fills.length > 0;
+      if (S.view.cdOnly && !hasFill && !d.cycleEnd) return;
+      const tr = tb.insertRow();
+      tr.className = 'click';
+      tr.tabIndex = 0;
+      cell(tr, `${d.date}`, 'l');
+      cell(tr, fmtMoney2(d.close));
+      const tdm = cell(tr, modeLabel(d.modeBefore), 'l lbl');
+      for (const e of d.events) {
+        let t = null, k = '';
+        if (e.startsWith('리버스 진입')) { t = '리버스 진입'; k = 'rev'; }
+        else if (e.startsWith('리버스 종료')) { t = '일반 복귀'; k = 'end'; }
+        else if (e.includes('T>n-1로 유지')) { t = '종료 보류'; k = 'rev'; }
+        else if (e === '사이클 종료') { t = '사이클 종료'; k = 'end'; }
+        else if (e === '사이클 시작') { t = '시작'; k = 'end'; }
+        if (t) { const b = document.createElement('span'); b.className = 'badge ' + k; b.textContent = t; tdm.append(b); }
+      }
+      cell(tr, `${d.Tbefore.toFixed(2)} → ${d.T.toFixed(2)}`);
+      const starTxt = d.star == null ? '—' : (d.starPct != null ? `${d.starPct.toFixed(2)}% · ` : '5일평균 · ') + fmtMoney2(d.star);
+      cell(tr, starTxt, d.star == null ? 'muted' : '');
+      const tdf = cell(tr, '', 'l');
+      if (hasFill) {
+        for (const f of d.fills) { const sp = document.createElement('span'); sp.className = 'fill ' + f.side; sp.textContent = fillText(f); tdf.append(sp); }
+      } else { tdf.textContent = '—'; tdf.classList.add('muted'); }
+      const rz = d.fills.reduce((a, f) => a + f.pnl, 0);
+      cell(tr, d.fills.some((f) => f.side === 'sell') ? fmtMoney2(rz).replace('$-', '-$') : '—', rz ? cls(rz) : 'muted');
+      cell(tr, d.shares.toLocaleString());
+      cell(tr, d.shares ? fmtMoney2(d.avg) : '—', d.shares ? '' : 'muted');
+      cell(tr, fmtMoney(d.cash));
+      const cyEq = d.cash + d.shares * d.close;
+      const cr = (cyEq / c.startCapital - 1) * 100;
+      cell(tr, fmtPct(cr), cls(cr));
+      const toggle = () => {
+        const nx = tr.nextElementSibling;
+        if (nx && nx.classList.contains('sub')) { nx.remove(); tr.setAttribute('aria-expanded', 'false'); return; }
+        const sub = document.createElement('tr');
+        sub.className = 'sub';
+        const td = sub.insertCell();
+        td.colSpan = 11;
+        const lines = E.orderLines(d.orders, 3);
+        const head = document.createElement('div');
+        head.textContent = `이날 걸린 주문 (전날 장 마감 기준, 1회 매수 시도액 ${d.amt ? fmtMoney2(d.amt) : '—'}${d.limitPrice ? `, 목표가 ${fmtMoney2(d.limitPrice)}` : ''})`;
+        const ul = document.createElement('ul');
+        for (const l of lines) { const li = document.createElement('li'); li.textContent = l; ul.append(li); }
+        if (!lines.length) { const li = document.createElement('li'); li.textContent = '주문 없음'; ul.append(li); }
+        td.append(head, ul);
+        tr.after(sub);
+        tr.setAttribute('aria-expanded', 'true');
+      };
+      tr.setAttribute('aria-expanded', 'false');
+      tr.addEventListener('click', toggle);
+      tr.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } });
+    });
   }
 
   // ---------- 다음 주문표 ----------
@@ -636,7 +968,7 @@ details ul { padding-left: 1.2em; margin: 8px 0 0; line-height: 1.7; }
     }
   }
 
-  function renderAll() { if (!S.result) return; renderSummary(); renderPeriods(); renderCharts(); renderCycles(); renderOrders(); }
+  function renderAll() { if (!S.result) return; renderSummary(); renderPeriods(); renderCharts(); renderCycles(); renderCycleDetail(); renderOrders(); }
 
   // ---------- 이벤트 ----------
   let timer = null;
@@ -652,8 +984,16 @@ details ul { padding-left: 1.2em; margin: 8px 0 0; line-height: 1.7; }
   $('p-recent').addEventListener('click', () => { S.view.period = 'recent'; renderPeriods(); });
   $('t-log').addEventListener('click', () => { S.view.log = !S.view.log; renderCharts(); });
   $('t-hold').addEventListener('click', () => { S.view.hold = !S.view.hold; renderCharts(); });
+  $('t-qqq').addEventListener('click', () => { S.view.qqq = !S.view.qqq; renderCharts(); });
+  $('cd-close').addEventListener('click', closeCycle);
+  $('cd-prev').addEventListener('click', () => stepCycle(-1));
+  $('cd-next').addEventListener('click', () => stepCycle(1));
+  $('cd-only').addEventListener('click', () => { S.view.cdOnly = !S.view.cdOnly; renderCycleDetail(); });
   let lastW = 0;
-  new ResizeObserver(() => { const w = $('chart-eq').clientWidth; if (S.result && Math.abs(w - lastW) > 4) { lastW = w; renderCharts(); } }).observe($('chart-eq'));
+  new ResizeObserver(() => {
+    const w = $('chart-eq').clientWidth;
+    if (S.result && Math.abs(w - lastW) > 4) { lastW = w; renderCharts(); if (S.cd != null) renderCycleDetail(); }
+  }).observe($('chart-eq'));
 
   restoreForm();
   compute();
