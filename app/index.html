@@ -12,7 +12,7 @@
 :root {
   --bg: #f4f6f8; --panel: #ffffff; --ink: #15202b; --muted: #5b6977; --line: #dde3ea;
   --accent: #0f6e66; --accent-soft: #e3f1ef; --up: #d23b3b; --down: #2c63c9; --rev: rgba(226, 150, 40, 0.16); --rev-ink: #a5670f;
-  --hold: #9aa6b2; --qqq: #7b5ad6;
+  --main: #0a9c8a; --hold: #6b7785; --qqq: #c9c0e6;
   --font-ui: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
   --font-num: "IBM Plex Mono", ui-monospace, "Consolas", monospace;
   --r: 10px;
@@ -20,11 +20,11 @@
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
   --bg: #0e141a; --panel: #161e26; --ink: #e4ebf2; --muted: #93a2b1; --line: #29343f;
   --accent: #3cb5a8; --accent-soft: #15302d; --up: #ff6a6a; --down: #6d9cff; --rev: rgba(233, 162, 59, 0.13); --rev-ink: #e8a74a;
-  --hold: #5f6c79; --qqq: #a98bff; color-scheme: dark; } }
+  --main: #3ed6c2; --hold: #a3afbb; --qqq: #554e78; color-scheme: dark; } }
 :root[data-theme="dark"] {
   --bg: #0e141a; --panel: #161e26; --ink: #e4ebf2; --muted: #93a2b1; --line: #29343f;
   --accent: #3cb5a8; --accent-soft: #15302d; --up: #ff6a6a; --down: #6d9cff; --rev: rgba(233, 162, 59, 0.13); --rev-ink: #e8a74a;
-  --hold: #5f6c79; --qqq: #a98bff; color-scheme: dark; }
+  --main: #3ed6c2; --hold: #a3afbb; --qqq: #554e78; color-scheme: dark; }
 html, body { margin: 0; }
 [hidden] { display: none !important; }
 body { background: var(--bg); color: var(--ink); font-family: var(--font-ui); font-size: 14px; line-height: 1.5; }
@@ -114,6 +114,7 @@ details summary { cursor: pointer; color: var(--ink); font-weight: 500; }
 details ul { padding-left: 1.2em; margin: 8px 0 0; line-height: 1.7; }
 .empty { padding: 30px 0; text-align: center; color: var(--muted); }
 .sw.qqq { background: var(--qqq); }
+.sw.main { background: var(--main); height: 4px; }
 .sw.avg { background: none; border-top: 2px dashed var(--accent); height: 0; }
 .sw.star { background: none; border-top: 2px dotted var(--rev-ink); height: 0; }
 .tri { width: 0; height: 0; display: inline-block; border-left: 5px solid transparent; border-right: 5px solid transparent; }
@@ -244,7 +245,7 @@ table.daytbl .fillbox .s { font-family: var(--font-ui); }
         </div>
       </div>
       <div class="legend">
-        <span><i class="sw"></i>무매 평가금</span>
+        <span><i class="sw main"></i>무매 평가금</span>
         <span id="lg-hold"><i class="sw hold"></i><span id="lg-hold-lbl">종목</span> 단순 보유</span>
         <span id="lg-qqq"><i class="sw qqq"></i><span id="lg-bench-lbl">QQQ</span> 단순 보유(기초지수)</span>
         <span><i class="dot up"></i>사이클 종료(수익)</span>
@@ -639,18 +640,19 @@ table.daytbl .fillbox .s { font-family: var(--font-ui); }
     }
 
     const ln = d3.line().x((d, i) => x(xs[i])).y((d) => d);
-    if (showHold) {
-      svg.append('path').attr('d', ln(hold.map((v) => y(v)))).attr('fill', 'none').style('stroke', 'var(--hold)').attr('stroke-width', 1.2);
-      svg2.append('path').attr('d', ln(holdDd.map((v) => y2(v)))).attr('fill', 'none').style('stroke', 'var(--hold)').attr('stroke-width', 1);
-    }
+    // 그리는 순서 = 눈에 띄는 순서의 역순: 기초지수 → 종목 보유 → 무매
     if (showQqq) {
-      svg.append('path').attr('d', ln(qqq.map((v) => y(v)))).attr('fill', 'none').style('stroke', 'var(--qqq)').attr('stroke-width', 1.3);
-      svg2.append('path').attr('d', ln(qqqDd.map((v) => y2(v)))).attr('fill', 'none').style('stroke', 'var(--qqq)').attr('stroke-width', 1.1);
+      svg.append('path').attr('d', ln(qqq.map((v) => y(v)))).attr('fill', 'none').style('stroke', 'var(--qqq)').attr('stroke-width', 1.1);
+      svg2.append('path').attr('d', ln(qqqDd.map((v) => y2(v)))).attr('fill', 'none').style('stroke', 'var(--qqq)').attr('stroke-width', 1);
     }
-    svg.append('path').attr('d', ln(daily.map((d) => y(d.equity)))).attr('fill', 'none').style('stroke', 'var(--ink)').attr('stroke-width', 1.6).attr('stroke-linejoin', 'round');
+    if (showHold) {
+      svg.append('path').attr('d', ln(hold.map((v) => y(v)))).attr('fill', 'none').style('stroke', 'var(--hold)').attr('stroke-width', 1.3);
+      svg2.append('path').attr('d', ln(holdDd.map((v) => y2(v)))).attr('fill', 'none').style('stroke', 'var(--hold)').attr('stroke-width', 1.1);
+    }
+    svg.append('path').attr('d', ln(daily.map((d) => y(d.equity)))).attr('fill', 'none').style('stroke', 'var(--main)').attr('stroke-width', 2.2).attr('stroke-linejoin', 'round');
     const area = d3.area().x((d, i) => x(xs[i])).y0(y2(0)).y1((d) => y2(d));
-    svg2.append('path').attr('d', area(dds)).style('fill', 'var(--down)').attr('fill-opacity', 0.16);
-    svg2.append('path').attr('d', ln(dds.map((v) => y2(v)))).attr('fill', 'none').style('stroke', 'var(--down)').attr('stroke-width', 1.2);
+    svg2.append('path').attr('d', area(dds)).style('fill', 'var(--main)').attr('fill-opacity', 0.14);
+    svg2.append('path').attr('d', ln(dds.map((v) => y2(v)))).attr('fill', 'none').style('stroke', 'var(--main)').attr('stroke-width', 1.6);
     svg2.append('line').attr('x1', ml).attr('x2', W - mr).attr('y1', y2(0)).attr('y2', y2(0)).style('stroke', 'var(--muted)').attr('stroke-opacity', 0.5);
 
     // 사이클 종료 표시
@@ -661,13 +663,13 @@ table.daytbl .fillbox .s { font-family: var(--font-ui); }
       .style('fill', (e) => (e.c.profit > 0 ? 'var(--up)' : 'var(--down)')).style('stroke', 'var(--panel)').attr('stroke-width', 1);
     // 끝점 강조
     const li = daily.length - 1;
-    svg.append('circle').attr('cx', x(xs[li])).attr('cy', y(daily[li].equity)).attr('r', 4.5).style('fill', 'var(--ink)');
+    svg.append('circle').attr('cx', x(xs[li])).attr('cy', y(daily[li].equity)).attr('r', 4.5).style('fill', 'var(--main)');
 
     // 호버
     const tip = d3.select(elE).append('div').attr('class', 'tip').style('display', 'none');
     const cur1 = svg.append('line').attr('y1', top).attr('y2', bot).style('stroke', 'var(--muted)').attr('stroke-dasharray', '3 3').attr('visibility', 'hidden');
     const cur2 = svg2.append('line').attr('y1', 6).attr('y2', bot2).style('stroke', 'var(--muted)').attr('stroke-dasharray', '3 3').attr('visibility', 'hidden');
-    const dot = svg.append('circle').attr('r', 4).style('fill', 'var(--ink)').style('stroke', 'var(--panel)').attr('stroke-width', 1.5).attr('visibility', 'hidden');
+    const dot = svg.append('circle').attr('r', 4).style('fill', 'var(--main)').style('stroke', 'var(--panel)').attr('stroke-width', 1.5).attr('visibility', 'hidden');
     const bis = d3.bisector((d) => d).center;
     function show(mx) {
       const i = bis(xs, x.invert(mx));
