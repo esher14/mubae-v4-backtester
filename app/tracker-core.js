@@ -253,7 +253,7 @@
   function estimateT(n, cash, shares, avg) {
     const inv = shares * avg;
     if (!(inv > 0)) return 0;
-    return Math.round((n * inv / (inv + Math.max(0, cash))) * 100) / 100;
+    return n * inv / (inv + Math.max(0, cash));
   }
 
   root.MubaeTracker = { ROLES, cfgOf, orderRows, autoJudge, applyDay, replay, estimateT, nextWeekday, addDays };

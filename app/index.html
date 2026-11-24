@@ -359,6 +359,8 @@ table.daytbl .fillbox .s { font-family: var(--font-ui); }
   const fmtPct = (v, d = 2) => (v > 0 ? '+' : '') + v.toFixed(d) + '%';
   const cls = (v) => (v > 0 ? 'up' : v < 0 ? 'down' : '');
   const parseDate = d3.utcParse('%Y-%m-%d');
+  const fmtT = (t) => String(+(+t).toPrecision(12)); // T는 소수점 제한 없음(부동소수 꼬리만 정리)
+  const signedT = (v) => (v > 0 ? '+' : v < 0 ? '−' : '±') + fmtT(Math.abs(v));
   const fmtDay = d3.utcFormat('%Y-%m-%d');
 
   // ---------- 입력 ----------
@@ -485,7 +487,7 @@ table.daytbl .fillbox .s { font-family: var(--font-ui); }
     if (s.openCycle) {
       const rev = s.openMode === 'REVERSE';
       st.className = 'chip ' + (rev ? 'reverse' : 'normal');
-      st.textContent = `${rev ? '리버스' : '일반'} · T ${s.openT.toFixed(2)}`;
+      st.textContent = `${rev ? '리버스' : '일반'} · T ${fmtT(s.openT)}`;
       $('k-state-s').textContent = `진행 중 ${s.openCycle.days}거래일, 평가손익 ${fmtPct(s.openUnrealizedPct)}`;
     } else {
       st.className = 'chip idle';
@@ -779,7 +781,7 @@ table.daytbl .fillbox .s { font-family: var(--font-ui); }
       const rows = [['무매 평가금', `${fmtMoney(d.equity)} (${fmtPct((d.equity / p0 - 1) * 100, 1)})`], ['무매 낙폭', (d.dd * 100).toFixed(2) + '%']];
       if (showHold) rows.push([`${tk} 보유`, `${fmtMoney(hold[i])} (${fmtPct((hold[i] / p0 - 1) * 100, 1)})`], [`${tk} 낙폭`, holdDd[i].toFixed(2) + '%']);
       if (showQqq) rows.push([`${bt} 보유`, `${fmtMoney(qqq[i])} (${fmtPct((qqq[i] / p0 - 1) * 100, 1)})`], [`${bt} 낙폭`, qqqDd[i].toFixed(2) + '%']);
-      rows.push([`${tk} 종가`, fmtMoney2(d.close)], ['모드 · T', `${d.mode === 'REVERSE' ? '리버스' : '일반'} · ${d.T.toFixed(3)}`], ['보유', `${d.shares.toLocaleString()}주`]);
+      rows.push([`${tk} 종가`, fmtMoney2(d.close)], ['모드 · T', `${d.mode === 'REVERSE' ? '리버스' : '일반'} · ${fmtT(d.T)}`], ['보유', `${d.shares.toLocaleString()}주`]);
       for (const [k, v] of rows) { const rr = tip.append('div').attr('class', 'r'); rr.append('span').text(k); rr.append('b').text(v); }
       const ev = d.events.slice();
       if (d.cycleEnd) ev.unshift(`사이클 #${r.cycles.indexOf(d.cycleEnd) + 1} 종료: ${fmtPct(d.cycleEnd.retPct)} (${d.cycleEnd.days}거래일)`);
@@ -837,7 +839,7 @@ table.daytbl .fillbox .s { font-family: var(--font-ui); }
       cell(tr, String(c.days));
       cell(tr, fmtMoney(c.startCapital)); cell(tr, fmtMoney(c.endCash));
       cell(tr, fmtPct(c.retPct), cls(c.retPct));
-      cell(tr, c.maxT.toFixed(2));
+      cell(tr, fmtT(c.maxT));
       cell(tr, c.reverseEntries ? c.reverseEntries + '회' : '—', c.reverseEntries ? '' : 'muted');
       cell(tr, fmtPct(c.lowRet * 100), c.lowRet < 0 ? 'down' : '');
     });
@@ -851,7 +853,7 @@ table.daytbl .fillbox .s { font-family: var(--font-ui); }
       cell(tr, fmtMoney(c.startCapital));
       cell(tr, fmtMoney(r.daily[r.daily.length - 1].equity - r.daily[r.daily.length - 1].withdrawn));
       cell(tr, fmtPct(s.openUnrealizedPct) + ' (평가)', cls(s.openUnrealizedPct));
-      cell(tr, c.maxT.toFixed(2));
+      cell(tr, fmtT(c.maxT));
       cell(tr, c.reverseEntries ? c.reverseEntries + '회' : '—');
       cell(tr, fmtPct(c.lowRet * 100), c.lowRet < 0 ? 'down' : '');
     }
@@ -910,7 +912,7 @@ table.daytbl .fillbox .s { font-family: var(--font-ui); }
     const sb = $('cd-stats');
     sb.replaceChildren();
     const items = [['거래일', days.length + '일'], ['시작 금액', fmtMoney(c.startCapital)], [it.open ? '현재 평가' : '종료 금액', fmtMoney(endVal)],
-      ['수익률', fmtPct(ret) + (it.open ? ' (평가)' : '')], ['최대 T', c.maxT.toFixed(2)], ['리버스', c.reverseEntries ? `${c.reverseEntries}회 · ${revDays}일` : '없음'],
+      ['수익률', fmtPct(ret) + (it.open ? ' (평가)' : '')], ['최대 T', fmtT(c.maxT)], ['리버스', c.reverseEntries ? `${c.reverseEntries}회 · ${revDays}일` : '없음'],
       ['매수', `${nb}회 · ${qb.toLocaleString()}주`], ['매도', `${ns}회 · ${qs.toLocaleString()}주`], ['실현손익', fmtMoney2(pnl).replace('$-', '-$')],
       ['사이클 중 최저', fmtPct(c.lowRet * 100)]];
     for (const [k, v] of items) { const sp = document.createElement('span'); sp.append(k + ' '); const b = document.createElement('b'); b.textContent = v; sp.append(b); sb.append(sp); }
@@ -1008,7 +1010,7 @@ table.daytbl .fillbox .s { font-family: var(--font-ui); }
       const eq = d.cash + d.shares * d.close;
       const rows = [['종가', fmtMoney2(d.close)], ['평단(매매 전)', d.avgBefore > 0 ? fmtMoney2(d.avgBefore) : '—'],
         [d.modeBefore === 'REVERSE' ? '별지점(5일 평균)' : '별지점', d.star ? fmtMoney2(d.star) : '—'],
-        ['T', `${d.Tbefore.toFixed(3)} → ${d.T.toFixed(3)}`], ['보유', `${d.sharesBefore.toLocaleString()} → ${d.shares.toLocaleString()}주`],
+        ['T', `${fmtT(d.Tbefore)} → ${fmtT(d.T)}`], ['보유', `${d.sharesBefore.toLocaleString()} → ${d.shares.toLocaleString()}주`],
         ['평가금', `${fmtMoney(eq)} (${fmtPct((eq / startCapital - 1) * 100)})`]];
       for (const [k, v] of rows) { const rr = tip.append('div').attr('class', 'r'); rr.append('span').text(k); rr.append('b').text(v); }
       const ev = d.fills.map(fillText).concat(d.events.filter((e) => !/매수|매도/.test(e)));
@@ -1082,7 +1084,7 @@ table.daytbl .fillbox .s { font-family: var(--font-ui); }
       if (badges.childElementCount) tdm.append(badges);
 
       const dT = d.T - d.Tbefore;
-      cell2(tr, d.T.toFixed(2), Math.abs(dT) < 1e-9 ? '유지' : signed(dT));
+      cell2(tr, fmtT(d.T), Math.abs(dT) < 1e-9 ? '유지' : signedT(dT));
 
       if (d.star == null) cell2(tr, '—', '', '', 'muted');
       else cell2(tr, fmtMoney2(d.star), d.starPct != null ? `별 ${d.starPct.toFixed(2)}%` : '5일 평균');
@@ -1154,7 +1156,7 @@ table.daytbl .fillbox .s { font-family: var(--font-ui); }
     $('orders-date').textContent = `${last.date} 장 마감 기준`;
     const sb = $('orders-state');
     sb.replaceChildren();
-    const items = [['모드', st.shares ? (st.mode === 'REVERSE' ? '리버스' : '일반') : '대기'], ['T', st.T.toFixed(4)],
+    const items = [['모드', st.shares ? (st.mode === 'REVERSE' ? '리버스' : '일반') : '대기'], ['T', fmtT(st.T)],
       ['보유', st.shares.toLocaleString() + '주'], ['평단', st.shares ? fmtMoney2(st.avg) : '—'], ['잔금', fmtMoney2(st.cash)]];
     if (r.nextOrders.starPct != null) items.push(['별%', r.nextOrders.starPct.toFixed(2) + '%']);
     for (const [k, v] of items) { const sp = document.createElement('span'); sp.append(k + ' '); const b = document.createElement('b'); b.textContent = v; sp.append(b); sb.append(sp); }
