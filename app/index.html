@@ -239,6 +239,7 @@ table.daytbl .fillbox .s { font-family: var(--font-ui); }
       <div class="cardhead">
         <h2>평가금 추이와 사이클 종료 시점</h2>
         <div class="toggles">
+          <button type="button" class="xbtn" id="t-zoom" hidden>전체 보기</button>
           <button type="button" class="tg" id="t-log" aria-pressed="true">로그 축</button>
           <button type="button" class="tg" id="t-hold" aria-pressed="true"><span id="t-hold-lbl">종목</span> 보유</button>
           <button type="button" class="tg" id="t-qqq" aria-pressed="true"><span id="t-bench-lbl">QQQ</span> 보유</button>
@@ -255,6 +256,7 @@ table.daytbl .fillbox .s { font-family: var(--font-ui); }
       <div class="chart" id="chart-eq"></div>
       <div class="muted" style="font-size:12px">고점 대비 낙폭</div>
       <div class="chart dd" id="chart-dd"></div>
+      <p class="hint">차트 위에서 휠을 굴리면 확대·축소, 확대한 뒤 끌면 이동, 더블클릭하면 전체 기간으로 돌아갑니다.</p>
       <div class="tablewrap">
         <table class="cmp">
           <thead><tr><th class="l">같은 기간, 같은 원금</th><th>최종 평가금</th><th>수익률</th><th>CAGR</th><th>MDD</th></tr></thead>
@@ -282,6 +284,7 @@ table.daytbl .fillbox .s { font-family: var(--font-ui); }
       <div class="cardhead">
         <h2 id="cd-title">사이클 상세</h2>
         <div class="navbtns">
+          <button type="button" class="xbtn" id="cd-zoom" hidden>전체 보기</button>
           <button type="button" class="xbtn" id="cd-prev" aria-label="이전 사이클">← 이전</button>
           <button type="button" class="xbtn" id="cd-next" aria-label="다음 사이클">다음 →</button>
           <button type="button" class="xbtn" id="cd-close">닫기</button>
@@ -291,7 +294,7 @@ table.daytbl .fillbox .s { font-family: var(--font-ui); }
       <div class="legend">
         <span><i class="sw"></i>종가</span>
         <span><i class="sw avg"></i>평단</span>
-        <span><i class="sw star"></i>별지점(그날 기준가)</span>
+        <span><i class="sw star"></i>별지점</span>
         <span><i class="tri buy"></i>매수</span>
         <span><i class="tri sell"></i>매도</span>
         <span><i class="sw rev"></i>리버스 모드</span>
@@ -299,6 +302,7 @@ table.daytbl .fillbox .s { font-family: var(--font-ui); }
       <div class="chart cd" id="cd-chart"></div>
       <div class="muted" style="font-size:12px">T 진행 (점선: 후반전 시작 n/2, 소진 기준 n−1)</div>
       <div class="chart tt" id="cd-tchart"></div>
+      <p class="hint">휠로 확대·축소, 끌어서 이동, 더블클릭으로 전체 보기.</p>
       <div class="cardhead">
         <h2 style="font-size:14px">날짜별 매매기록</h2>
         <div class="toggles">
@@ -308,7 +312,7 @@ table.daytbl .fillbox .s { font-family: var(--font-ui); }
       <p class="hint">굵은 값은 그날 매매를 마친 뒤의 값이고, 아래 작은 글씨는 전날 대비 변화와 보조 정보입니다. 행을 누르면 그날 걸었던 주문표(전날 장 마감 기준)를 펼쳐 봅니다.</p>
       <div class="tablewrap tall">
         <table class="daytbl">
-          <thead><tr><th class="l">날짜</th><th>종가</th><th class="l">모드</th><th>T</th><th>기준가</th><th class="l">체결</th><th>실현손익</th><th>보유(주)</th><th>평단</th><th>잔금</th><th>누적 실현손익</th></tr></thead>
+          <thead><tr><th class="l">날짜</th><th>종가</th><th class="l">모드</th><th>T</th><th>별지점</th><th class="l">체결</th><th>실현손익</th><th>보유(주)</th><th>평단</th><th>잔금</th><th>누적 실현손익</th></tr></thead>
           <tbody id="cd-body"></tbody>
         </table>
       </div>
@@ -346,7 +350,7 @@ table.daytbl .fillbox .s { font-family: var(--font-ui); }
 (function () {
   const E = window.MubaeEngine;
   const $ = (id) => document.getElementById(id);
-  const S = { bars: {}, result: null, view: { log: true, hold: true, qqq: true, period: 'since', cdOnly: false }, cd: null };
+  const S = { bars: {}, result: null, view: { log: true, hold: true, qqq: true, period: 'since', cdOnly: false }, cd: null, zoom: {} };
   const BENCH = { TQQQ: 'QQQ', SOXL: 'SOXX' }; // 3배 레버리지 종목의 기초지수 ETF
   const STORE_KEY = 'mubae-backtester-inputs-v1';
   const fmtMoney = (v) => (v < 0 ? '-$' : '$') + d3.format(',.0f')(Math.abs(v));
@@ -574,6 +578,69 @@ table.daytbl .fillbox .s { font-family: var(--font-ui); }
     return { g, ml: Math.ceil(mw) + 12 };
   }
 
+  // ---------- 확대/축소: 휠로 확대·축소, 끌어서 이동, 더블클릭으로 전체 ----------
+  // 창은 데이터 인덱스(실수) 구간 [lo, hi]로 기억한다. 전체 구간이면 기록을 지운다.
+  function zoomWin(key, total) {
+    const z = S.zoom[key];
+    return z && z.total === total ? [z.lo, z.hi] : [0, Math.max(0, total - 1)];
+  }
+  function zoomSet(key, total, lo, hi, minSpan) {
+    const full = total - 1;
+    const span = Math.min(full, Math.max(Math.min(minSpan, full), hi - lo));
+    if (span >= full - 1e-6) { delete S.zoom[key]; return; }
+    lo = Math.max(0, Math.min(lo, full - span));
+    S.zoom[key] = { total, lo, hi: lo + span };
+  }
+  // rects: 차트 위 투명 오버레이들, plot(): 현재 [왼쪽 x, 오른쪽 x](viewBox 좌표)
+  function bindZoom(rects, key, total, minSpan, plot, redraw, onStart) {
+    let drag = null, raf = 0;
+    const req = () => { if (!raf) raf = requestAnimationFrame(() => { raf = 0; redraw(); }); };
+    const idxAt = (px) => { const [lo, hi] = zoomWin(key, total), [a, b] = plot(); return lo + (px - a) / Math.max(1, b - a) * (hi - lo); };
+    rects.on('wheel', function (ev) {
+      const [lo, hi] = zoomWin(key, total);
+      const zoomed = !!S.zoom[key];
+      const dx = ev.deltaMode === 1 ? ev.deltaX * 33 : ev.deltaX, dy = ev.deltaMode === 1 ? ev.deltaY * 33 : ev.deltaY;
+      if (Math.abs(dx) > Math.abs(dy)) { // 트랙패드 가로 밀기 = 이동
+        if (!zoomed) return;
+        ev.preventDefault();
+        const [a, b] = plot(), d = dx / Math.max(1, b - a) * (hi - lo);
+        zoomSet(key, total, lo + d, hi + d, minSpan); req(); return;
+      }
+      if (!zoomed && dy > 0) return; // 전체 보기에서 축소 방향이면 페이지 스크롤에 양보
+      ev.preventDefault();
+      onStart();
+      const at = idxAt(d3.pointer(ev, this)[0]);
+      const span = Math.max(1, hi - lo), ns = span * Math.exp(Math.max(-0.6, Math.min(0.6, dy / 300)));
+      const nlo = at - (at - lo) * ns / span;
+      zoomSet(key, total, nlo, nlo + ns, minSpan); req();
+    }).on('pointerdown', function (ev) {
+      if (ev.button !== 0 || !S.zoom[key]) return;
+      const [lo, hi] = zoomWin(key, total), [a, b] = plot();
+      const m = this.getScreenCTM();
+      drag = { x: ev.clientX, lo, hi, w: (b - a) * (m ? m.a : 1) };
+      this.setPointerCapture(ev.pointerId);
+      d3.select(this).style('cursor', 'grabbing');
+      onStart();
+    }).on('pointermove.zoom', (ev) => {
+      if (!drag) return;
+      const d = (ev.clientX - drag.x) / Math.max(1, drag.w) * (drag.hi - drag.lo);
+      zoomSet(key, total, drag.lo - d, drag.hi - d, minSpan); req();
+    }).on('pointerup pointercancel', function () {
+      drag = null;
+      d3.select(this).style('cursor', null);
+    }).on('dblclick', () => { delete S.zoom[key]; req(); });
+    return { busy: () => !!drag };
+  }
+  function tAt(xs, f) {
+    const a = Math.floor(f), b = Math.min(xs.length - 1, Math.ceil(f));
+    return new Date(+xs[a] + (+xs[b] - +xs[a]) * (f - a));
+  }
+  function logTicks(y) {
+    let tv = yTicksLog(y);
+    if (tv.length < 3) tv = d3.ticks(y.domain()[0], y.domain()[1], 5);
+    return tv;
+  }
+
   let hoverIdx = null;
   function renderCharts() {
     const r = S.result, daily = r.daily, view = S.view;
@@ -593,86 +660,113 @@ table.daytbl .fillbox .s { font-family: var(--font-ui); }
     const elE = $('chart-eq'), elD = $('chart-dd');
     elE.replaceChildren(); elD.replaceChildren();
     const W = Math.max(280, elE.clientWidth);
-    const H = 300, H2 = 130, top = 10, bot = H - 24, bot2 = H2 - 22;
+    const H = 300, H2 = 130, top = 10, bot = H - 24, bot2 = H2 - 22, mr = 12;
     const xs = daily.map((d) => parseDate(d.date));
-
-    const vals = daily.map((d) => d.equity).concat(showHold ? hold : [], showQqq ? qqq : []);
-    const ext = d3.extent(vals);
-    const y = view.log ? d3.scaleLog([Math.max(1, ext[0] * 0.92), ext[1] * 1.08], [bot, top])
-      : d3.scaleLinear([0, ext[1] * 1.04], [bot, top]).nice();
-    const tv = view.log ? yTicksLog(y) : y.ticks(5);
+    const N = daily.length, zkey = `eq:${tk}:${daily[0].date}:${N}`;
+    S.eqKey = zkey;
     const fmtY = (v) => '$' + d3.format('~s')(v).replace('G', 'B');
 
-    // 낙폭 차트(먼저 축 폭을 재서 두 차트의 왼쪽 여백을 맞춘다)
     const dds = daily.map((d) => d.dd * 100);
     const holdDd = showHold ? seriesStats(hold, r.cfg.principal, 0).dd : [];
     const qqqDd = showQqq ? seriesStats(qqq, r.cfg.principal, 0).dd : [];
-    const ddMin = Math.min(d3.min(dds), showHold ? d3.min(holdDd) : 0, showQqq ? d3.min(qqqDd) : 0, -1);
-    const y2 = d3.scaleLinear([ddMin * 1.05, 0], [bot2, 6]).nice();
+    // 리버스 구간
+    const bands = [];
+    let st = null;
+    daily.forEach((d, i) => {
+      const inRev = d.mode === 'REVERSE' || d.modeBefore === 'REVERSE';
+      if (inRev && st == null) st = i;
+      if ((!inRev || i === N - 1) && st != null) { bands.push([st, inRev ? i : i - 1]); st = null; }
+    });
+    const ends = [];
+    daily.forEach((d, i) => { if (d.cycleEnd) ends.push({ i, c: d.cycleEnd }); });
 
     const svg = d3.select(elE).append('svg').attr('viewBox', `0 0 ${W} ${H}`).attr('height', H)
       .attr('role', 'img').attr('aria-label', `${r.stats.ticker} 무한매수법 평가금 추이와 사이클 종료 시점`);
     const svg2 = d3.select(elD).append('svg').attr('viewBox', `0 0 ${W} ${H2}`).attr('height', H2)
       .attr('role', 'img').attr('aria-label', '고점 대비 낙폭');
-    const a1 = axisLeftMeasured(svg, y, tv, fmtY);
-    const a2 = axisLeftMeasured(svg2, y2, y2.ticks(4), (v) => v + '%');
-    const ml = Math.max(a1.ml, a2.ml), mr = 12;
-    a1.g.attr('transform', `translate(${ml},0)`);
-    a2.g.attr('transform', `translate(${ml},0)`);
-    const x = d3.scaleUtc(d3.extent(xs), [ml, W - mr]);
-    const nT = Math.max(2, Math.floor((W - ml - mr) / 90));
-
-    for (const [s, yy, b, ticks] of [[svg, y, bot, tv], [svg2, y2, bot2, y2.ticks(4)]]) {
-      s.insert('g', ':first-child').attr('class', 'grid').attr('transform', `translate(${ml},0)`)
-        .call(d3.axisLeft(yy).tickValues(ticks).tickSize(-(W - ml - mr)).tickFormat(''));
-      // 리버스 구간 음영
-      const bands = [];
-      let st = null;
-      daily.forEach((d, i) => {
-        const inRev = d.mode === 'REVERSE' || d.modeBefore === 'REVERSE';
-        if (inRev && st == null) st = i;
-        if ((!inRev || i === daily.length - 1) && st != null) { bands.push([st, inRev ? i : i - 1]); st = null; }
-      });
-      s.insert('g', '.grid + *').selectAll('rect').data(bands).join('rect')
-        .attr('x', (bd) => x(xs[bd[0]]) - 1).attr('width', (bd) => Math.max(2, x(xs[bd[1]]) - x(xs[bd[0]]) + 2))
-        .attr('y', yy === y ? top : 6).attr('height', (yy === y ? bot - top : bot2 - 6)).style('fill', 'var(--rev)');
-      s.append('g').attr('transform', `translate(0,${b})`).call(d3.axisBottom(x).ticks(nT).tickSizeOuter(0));
-    }
-
-    const ln = d3.line().x((d, i) => x(xs[i])).y((d) => d);
-    // 그리는 순서 = 눈에 띄는 순서의 역순: 기초지수 → 종목 보유 → 무매
-    if (showQqq) {
-      svg.append('path').attr('d', ln(qqq.map((v) => y(v)))).attr('fill', 'none').style('stroke', 'var(--qqq)').attr('stroke-width', 1.1);
-      svg2.append('path').attr('d', ln(qqqDd.map((v) => y2(v)))).attr('fill', 'none').style('stroke', 'var(--qqq)').attr('stroke-width', 1);
-    }
-    if (showHold) {
-      svg.append('path').attr('d', ln(hold.map((v) => y(v)))).attr('fill', 'none').style('stroke', 'var(--hold)').attr('stroke-width', 1.3);
-      svg2.append('path').attr('d', ln(holdDd.map((v) => y2(v)))).attr('fill', 'none').style('stroke', 'var(--hold)').attr('stroke-width', 1.1);
-    }
-    svg.append('path').attr('d', ln(daily.map((d) => y(d.equity)))).attr('fill', 'none').style('stroke', 'var(--main)').attr('stroke-width', 2.2).attr('stroke-linejoin', 'round');
-    const area = d3.area().x((d, i) => x(xs[i])).y0(y2(0)).y1((d) => y2(d));
-    svg2.append('path').attr('d', area(dds)).style('fill', 'var(--main)').attr('fill-opacity', 0.14);
-    svg2.append('path').attr('d', ln(dds.map((v) => y2(v)))).attr('fill', 'none').style('stroke', 'var(--main)').attr('stroke-width', 1.6);
-    svg2.append('line').attr('x1', ml).attr('x2', W - mr).attr('y1', y2(0)).attr('y2', y2(0)).style('stroke', 'var(--muted)').attr('stroke-opacity', 0.5);
-
-    // 사이클 종료 표시
-    const ends = [];
-    daily.forEach((d, i) => { if (d.cycleEnd) ends.push({ i, c: d.cycleEnd }); });
-    svg.append('g').selectAll('circle').data(ends).join('circle')
-      .attr('cx', (e) => x(xs[e.i])).attr('cy', (e) => y(daily[e.i].equity)).attr('r', 3.6)
-      .style('fill', (e) => (e.c.profit > 0 ? 'var(--up)' : 'var(--down)')).style('stroke', 'var(--panel)').attr('stroke-width', 1);
-    // 끝점 강조
-    const li = daily.length - 1;
-    svg.append('circle').attr('cx', x(xs[li])).attr('cy', y(daily[li].equity)).attr('r', 4.5).style('fill', 'var(--main)');
-
-    // 호버
+    const clip1 = svg.append('clipPath').attr('id', 'clip-eq').append('rect').attr('y', 0).attr('height', H);
+    const clip2 = svg2.append('clipPath').attr('id', 'clip-dd').append('rect').attr('y', 0).attr('height', H2);
+    const L1 = svg.append('g'), L2 = svg2.append('g');
+    const ov = d3.selectAll([svg.append('rect').attr('y', 0).attr('height', H).node(), svg2.append('rect').attr('y', 0).attr('height', H2).node()])
+      .attr('fill', 'transparent').style('touch-action', 'pan-y');
     const tip = d3.select(elE).append('div').attr('class', 'tip').style('display', 'none');
-    const cur1 = svg.append('line').attr('y1', top).attr('y2', bot).style('stroke', 'var(--muted)').attr('stroke-dasharray', '3 3').attr('visibility', 'hidden');
-    const cur2 = svg2.append('line').attr('y1', 6).attr('y2', bot2).style('stroke', 'var(--muted)').attr('stroke-dasharray', '3 3').attr('visibility', 'hidden');
-    const dot = svg.append('circle').attr('r', 4).style('fill', 'var(--main)').style('stroke', 'var(--panel)').attr('stroke-width', 1.5).attr('visibility', 'hidden');
+
+    let x, y, ml = 40, i0 = 0, i1 = N - 1, cur1, cur2, dot;
+    function draw() {
+      const [lo, hi] = zoomWin(zkey, N);
+      i0 = Math.floor(lo); i1 = Math.min(N - 1, Math.ceil(hi));
+      const zoomed = !!S.zoom[zkey];
+      $('t-zoom').hidden = !zoomed;
+      L1.selectAll('*').remove(); L2.selectAll('*').remove();
+      const sl = (a) => a.slice(i0, i1 + 1);
+
+      const vals = sl(daily).map((d) => d.equity).concat(showHold ? sl(hold) : [], showQqq ? sl(qqq) : []);
+      const ext = d3.extent(vals);
+      const pad = (ext[1] - ext[0]) * 0.06 || ext[1] * 0.02;
+      y = view.log ? d3.scaleLog([Math.max(1, ext[0] * 0.95), ext[1] * 1.05], [bot, top])
+        : d3.scaleLinear(zoomed ? [Math.max(0, ext[0] - pad), ext[1] + pad] : [0, ext[1] * 1.04], [bot, top]).nice();
+      const tv = view.log ? logTicks(y) : y.ticks(5);
+      const ddMin = Math.min(d3.min(sl(dds)), showHold ? d3.min(sl(holdDd)) : 0, showQqq ? d3.min(sl(qqqDd)) : 0, -1);
+      const y2 = d3.scaleLinear([ddMin * 1.05, 0], [bot2, 6]).nice();
+
+      // 낙폭 차트와 왼쪽 여백을 맞춘다
+      const a1 = axisLeftMeasured(L1, y, tv, fmtY);
+      const a2 = axisLeftMeasured(L2, y2, y2.ticks(4), (v) => v + '%');
+      ml = Math.max(a1.ml, a2.ml);
+      a1.g.attr('transform', `translate(${ml},0)`);
+      a2.g.attr('transform', `translate(${ml},0)`);
+      x = d3.scaleUtc([tAt(xs, lo), tAt(xs, hi)], [ml, W - mr]);
+      const nT = Math.max(2, Math.floor((W - ml - mr) / 90));
+      // 눈금 간격에 맞춰 2016 / 16-03 / 03-14 형식으로 표시
+      const xt = x.ticks(nT);
+      const xf = d3.utcFormat(xt.every((t) => t.getUTCMonth() === 0 && t.getUTCDate() === 1) ? '%Y'
+        : xt.every((t) => t.getUTCDate() === 1) ? '%y-%m' : '%m-%d');
+      for (const c of [clip1, clip2]) c.attr('x', ml - 2).attr('width', W - ml - mr + 4);
+      ov.attr('x', ml).attr('width', W - ml - mr).style('cursor', zoomed ? 'grab' : null);
+
+      const G = [];
+      for (const [L, yy, b, ticks, cid] of [[L1, y, bot, tv, 'clip-eq'], [L2, y2, bot2, y2.ticks(4), 'clip-dd']]) {
+        L.insert('g', ':first-child').attr('class', 'grid').attr('transform', `translate(${ml},0)`)
+          .call(d3.axisLeft(yy).tickValues(ticks).tickSize(-(W - ml - mr)).tickFormat(''));
+        const g = L.append('g').attr('clip-path', `url(#${cid})`);
+        g.append('g').selectAll('rect').data(bands.filter((bd) => bd[1] >= i0 && bd[0] <= i1)).join('rect')
+          .attr('x', (bd) => x(xs[bd[0]]) - 1).attr('width', (bd) => Math.max(2, x(xs[bd[1]]) - x(xs[bd[0]]) + 2))
+          .attr('y', yy === y ? top : 6).attr('height', (yy === y ? bot - top : bot2 - 6)).style('fill', 'var(--rev)');
+        L.append('g').attr('transform', `translate(0,${b})`).call(d3.axisBottom(x).tickValues(xt).tickFormat(xf).tickSizeOuter(0));
+        G.push(g);
+      }
+      const [g1, g2] = G;
+
+      const ln = d3.line().x((d, k) => x(xs[i0 + k])).y((d) => d);
+      // 그리는 순서 = 눈에 띄는 순서의 역순: 기초지수 → 종목 보유 → 무매
+      if (showQqq) {
+        g1.append('path').attr('d', ln(sl(qqq).map((v) => y(v)))).attr('fill', 'none').style('stroke', 'var(--qqq)').attr('stroke-width', 1.1);
+        g2.append('path').attr('d', ln(sl(qqqDd).map((v) => y2(v)))).attr('fill', 'none').style('stroke', 'var(--qqq)').attr('stroke-width', 1);
+      }
+      if (showHold) {
+        g1.append('path').attr('d', ln(sl(hold).map((v) => y(v)))).attr('fill', 'none').style('stroke', 'var(--hold)').attr('stroke-width', 1.3);
+        g2.append('path').attr('d', ln(sl(holdDd).map((v) => y2(v)))).attr('fill', 'none').style('stroke', 'var(--hold)').attr('stroke-width', 1.1);
+      }
+      g1.append('path').attr('d', ln(sl(daily).map((d) => y(d.equity)))).attr('fill', 'none').style('stroke', 'var(--main)').attr('stroke-width', 2.2).attr('stroke-linejoin', 'round');
+      const area = d3.area().x((d, k) => x(xs[i0 + k])).y0(y2(0)).y1((d) => y2(d));
+      g2.append('path').attr('d', area(sl(dds))).style('fill', 'var(--main)').attr('fill-opacity', 0.14);
+      g2.append('path').attr('d', ln(sl(dds).map((v) => y2(v)))).attr('fill', 'none').style('stroke', 'var(--main)').attr('stroke-width', 1.6);
+      L2.append('line').attr('x1', ml).attr('x2', W - mr).attr('y1', y2(0)).attr('y2', y2(0)).style('stroke', 'var(--muted)').attr('stroke-opacity', 0.5);
+
+      // 사이클 종료 표시와 끝점
+      g1.append('g').selectAll('circle').data(ends.filter((e) => e.i >= i0 && e.i <= i1)).join('circle')
+        .attr('cx', (e) => x(xs[e.i])).attr('cy', (e) => y(daily[e.i].equity)).attr('r', zoomed ? 4.2 : 3.6)
+        .style('fill', (e) => (e.c.profit > 0 ? 'var(--up)' : 'var(--down)')).style('stroke', 'var(--panel)').attr('stroke-width', 1);
+      if (i1 === N - 1) g1.append('circle').attr('cx', x(xs[N - 1])).attr('cy', y(daily[N - 1].equity)).attr('r', 4.5).style('fill', 'var(--main)');
+
+      cur1 = L1.append('line').attr('y1', top).attr('y2', bot).style('stroke', 'var(--muted)').attr('stroke-dasharray', '3 3').attr('visibility', 'hidden');
+      cur2 = L2.append('line').attr('y1', 6).attr('y2', bot2).style('stroke', 'var(--muted)').attr('stroke-dasharray', '3 3').attr('visibility', 'hidden');
+      dot = L1.append('circle').attr('r', 4).style('fill', 'var(--main)').style('stroke', 'var(--panel)').attr('stroke-width', 1.5).attr('visibility', 'hidden');
+    }
+
     const bis = d3.bisector((d) => d).center;
     function show(mx) {
-      const i = bis(xs, x.invert(mx));
+      const i = Math.max(i0, Math.min(i1, bis(xs, x.invert(mx))));
       const d = daily[i];
       const px = x(xs[i]);
       cur1.attr('x1', px).attr('x2', px).attr('visibility', 'visible');
@@ -695,11 +789,10 @@ table.daytbl .fillbox .s { font-family: var(--font-ui); }
       if (left + tw > elE.clientWidth) left = px * sc - tw - 14;
       tip.style('left', Math.max(0, left) + 'px');
     }
-    function hide() { tip.style('display', 'none'); [cur1, cur2, dot].forEach((e) => e.attr('visibility', 'hidden')); }
-    for (const [s, h] of [[svg, H], [svg2, H2]]) {
-      s.append('rect').attr('x', ml).attr('y', 0).attr('width', W - ml - mr).attr('height', h).attr('fill', 'transparent')
-        .on('pointermove', (ev) => show(d3.pointer(ev)[0])).on('pointerleave', hide);
-    }
+    function hide() { tip.style('display', 'none'); [cur1, cur2, dot].forEach((e) => e && e.attr('visibility', 'hidden')); }
+    draw();
+    const zb = bindZoom(ov, zkey, N, 20, () => [ml, W - mr], () => { draw(); hide(); }, hide);
+    ov.on('pointermove', (ev) => { if (!zb.busy()) show(d3.pointer(ev)[0]); }).on('pointerleave', hide);
   }
 
   function renderCompare() {
@@ -821,75 +914,101 @@ table.daytbl .fillbox .s { font-family: var(--font-ui); }
       ['사이클 중 최저', fmtPct(c.lowRet * 100)]];
     for (const [k, v] of items) { const sp = document.createElement('span'); sp.append(k + ' '); const b = document.createElement('b'); b.textContent = v; sp.append(b); sb.append(sp); }
 
-    renderCycleCharts(days, n);
+    renderCycleCharts(days, n, c.startCapital);
     renderCycleTable(days, c, it.i0 > 0 ? daily[it.i0 - 1].close : null);
   }
 
-  function renderCycleCharts(days, n) {
+  function renderCycleCharts(days, n, startCapital) {
     const el = $('cd-chart'), elT = $('cd-tchart');
     el.replaceChildren(); elT.replaceChildren();
-    const W = Math.max(280, el.clientWidth), H = 260, H2 = 120, top = 10, bot = H - 24, bot2 = H2 - 22;
+    const W = Math.max(280, el.clientWidth), H = 260, H2 = 120, top = 10, bot = H - 24, bot2 = H2 - 22, mr = 12;
     const xs = days.map((d) => parseDate(d.date));
-    const pts = [];
-    days.forEach((d) => { pts.push(d.close); if (d.avgBefore > 0) pts.push(d.avgBefore); if (d.avg > 0) pts.push(d.avg); if (d.star) pts.push(d.star); });
-    const ext = d3.extent(pts);
-    const pad = (ext[1] - ext[0]) * 0.08 || ext[0] * 0.05;
-    const y = d3.scaleLinear([ext[0] - pad, ext[1] + pad], [bot, top]).nice();
+    const N = days.length, zkey = `cd:${S.cd}:${days[0].date}:${N}`;
+    S.cdKey = zkey;
     const tMax = Math.max(n, d3.max(days, (d) => d.T));
     const y2 = d3.scaleLinear([0, tMax], [bot2, 6]).nice();
-    const svg = d3.select(el).append('svg').attr('viewBox', `0 0 ${W} ${H}`).attr('height', H).attr('role', 'img').attr('aria-label', '사이클 동안의 종가, 평단, 별지점과 매매 시점');
-    const svg2 = d3.select(elT).append('svg').attr('viewBox', `0 0 ${W} ${H2}`).attr('height', H2).attr('role', 'img').attr('aria-label', '사이클 동안의 T 진행');
-    const a1 = axisLeftMeasured(svg, y, y.ticks(5), (v) => '$' + d3.format(',.2~f')(v));
-    const a2 = axisLeftMeasured(svg2, y2, y2.ticks(4), (v) => String(v));
-    const ml = Math.max(a1.ml, a2.ml), mr = 12;
-    a1.g.attr('transform', `translate(${ml},0)`); a2.g.attr('transform', `translate(${ml},0)`);
-    // 일 단위 위치(거래일 순번)로 그려 휴장일 빈칸 없이 촘촘히 보이게 한다
-    const x = d3.scaleLinear([0, Math.max(1, days.length - 1)], [ml + 6, W - mr - 6]);
-    const nT = Math.max(2, Math.min(days.length, Math.floor((W - ml - mr) / 80)));
-    const tickIdx = d3.range(nT).map((k) => Math.round(k * (days.length - 1) / Math.max(1, nT - 1)));
-    const fmtMD = d3.utcFormat(days.length > 250 ? '%y-%m' : '%m-%d');
-    for (const [s, yy, b, ticks, h] of [[svg, y, bot, y.ticks(5), H], [svg2, y2, bot2, y2.ticks(4), H2]]) {
-      s.insert('g', ':first-child').attr('class', 'grid').attr('transform', `translate(${ml},0)`)
-        .call(d3.axisLeft(yy).tickValues(ticks).tickSize(-(W - ml - mr)).tickFormat(''));
-      const step = days.length > 1 ? x(1) - x(0) : 10;
-      s.insert('g', '.grid + *').selectAll('rect').data(days.map((d, i) => [d, i]).filter(([d]) => d.modeBefore === 'REVERSE' || d.mode === 'REVERSE'))
-        .join('rect').attr('x', ([, i]) => x(i) - step / 2).attr('width', step).attr('y', yy === y ? top : 6)
-        .attr('height', yy === y ? bot - top : bot2 - 6).style('fill', 'var(--rev)');
-      s.append('g').attr('transform', `translate(0,${b})`)
-        .call(d3.axisBottom(x).tickValues(tickIdx).tickFormat((i) => fmtMD(xs[i])).tickSizeOuter(0));
-    }
-    const line = (acc) => d3.line().defined((d) => acc(d) > 0).x((d, i) => x(i)).y((d) => y(acc(d)));
-    svg.append('path').attr('d', line((d) => d.star || 0)(days)).attr('fill', 'none').style('stroke', 'var(--rev-ink)').attr('stroke-width', 1.4).attr('stroke-dasharray', '1.5 3').attr('stroke-linecap', 'round');
-    svg.append('path').attr('d', d3.line().defined((d) => d.avgBefore > 0).x((d, i) => x(i)).y((d) => y(d.avgBefore)).curve(d3.curveStepAfter)(days))
-      .attr('fill', 'none').style('stroke', 'var(--accent)').attr('stroke-width', 1.5).attr('stroke-dasharray', '5 3');
-    svg.append('path').attr('d', line((d) => d.close)(days)).attr('fill', 'none').style('stroke', 'var(--ink)').attr('stroke-width', 1.6);
     const marks = [];
     days.forEach((d, i) => d.fills.forEach((f) => marks.push({ i, f })));
-    const tri = d3.symbol().type(d3.symbolTriangle).size(60);
-    svg.append('g').selectAll('path').data(marks).join('path').attr('d', tri)
-      .attr('transform', (m) => `translate(${x(m.i)},${y(m.f.price) + (m.f.side === 'buy' ? 9 : -9)}) rotate(${m.f.side === 'buy' ? 0 : 180})`)
-      .style('fill', (m) => (m.f.side === 'buy' ? 'var(--up)' : 'var(--down)'));
-    // T 차트
-    for (const [lv, lab] of [[n / 2, '후반전'], [n - 1, '소진']]) {
-      svg2.append('line').attr('x1', ml).attr('x2', W - mr).attr('y1', y2(lv)).attr('y2', y2(lv)).style('stroke', 'var(--muted)').attr('stroke-dasharray', '4 3').attr('stroke-opacity', 0.7);
-      svg2.append('text').attr('x', W - mr).attr('y', y2(lv) - 3).attr('text-anchor', 'end').style('fill', 'var(--muted)').style('font-size', '10.5px').text(`${lab} ${lv}`);
-    }
-    svg2.append('path').attr('d', d3.line().x((d, i) => x(i)).y((d) => y2(d.T)).curve(d3.curveStepAfter)(days))
-      .attr('fill', 'none').style('stroke', 'var(--accent)').attr('stroke-width', 1.6);
 
-    // 호버
+    const svg = d3.select(el).append('svg').attr('viewBox', `0 0 ${W} ${H}`).attr('height', H).attr('role', 'img').attr('aria-label', '사이클 동안의 종가, 평단, 별지점과 매매 시점');
+    const svg2 = d3.select(elT).append('svg').attr('viewBox', `0 0 ${W} ${H2}`).attr('height', H2).attr('role', 'img').attr('aria-label', '사이클 동안의 T 진행');
+    const clip1 = svg.append('clipPath').attr('id', 'clip-cd').append('rect').attr('y', 0).attr('height', H);
+    const clip2 = svg2.append('clipPath').attr('id', 'clip-tt').append('rect').attr('y', 0).attr('height', H2);
+    const L1 = svg.append('g'), L2 = svg2.append('g');
+    const ov = d3.selectAll([svg.append('rect').attr('y', 0).attr('height', H).node(), svg2.append('rect').attr('y', 0).attr('height', H2).node()])
+      .attr('fill', 'transparent').style('touch-action', 'pan-y');
     const tip = d3.select(el).append('div').attr('class', 'tip').style('display', 'none');
-    const cur = [svg.append('line').attr('y1', top).attr('y2', bot), svg2.append('line').attr('y1', 6).attr('y2', bot2)]
-      .map((l) => l.style('stroke', 'var(--muted)').attr('stroke-dasharray', '3 3').attr('visibility', 'hidden'));
+
+    let x, ml = 40, i0 = 0, i1 = N - 1, cur = [];
+    function draw() {
+      const [lo, hi] = zoomWin(zkey, N);
+      i0 = Math.floor(lo); i1 = Math.min(N - 1, Math.ceil(hi));
+      const zoomed = !!S.zoom[zkey];
+      $('cd-zoom').hidden = !zoomed;
+      L1.selectAll('*').remove(); L2.selectAll('*').remove();
+
+      const pts = [];
+      days.slice(i0, i1 + 1).forEach((d) => { pts.push(d.close); if (d.avgBefore > 0) pts.push(d.avgBefore); if (d.avg > 0) pts.push(d.avg); if (d.star) pts.push(d.star); });
+      const ext = d3.extent(pts);
+      const pad = (ext[1] - ext[0]) * 0.08 || ext[0] * 0.05;
+      const y = d3.scaleLinear([ext[0] - pad, ext[1] + pad], [bot, top]).nice();
+      const a1 = axisLeftMeasured(L1, y, y.ticks(5), (v) => '$' + d3.format(',.2~f')(v));
+      const a2 = axisLeftMeasured(L2, y2, y2.ticks(4), (v) => String(v));
+      ml = Math.max(a1.ml, a2.ml);
+      a1.g.attr('transform', `translate(${ml},0)`); a2.g.attr('transform', `translate(${ml},0)`);
+      // 일 단위 위치(거래일 순번)로 그려 휴장일 빈칸 없이 촘촘히 보이게 한다
+      x = d3.scaleLinear([lo, lo + Math.max(1, hi - lo)], [ml + 6, W - mr - 6]);
+      for (const c of [clip1, clip2]) c.attr('x', ml).attr('width', W - ml - mr);
+      ov.attr('x', ml).attr('width', W - ml - mr).style('cursor', zoomed ? 'grab' : null);
+      const a = Math.ceil(lo), b = Math.floor(hi);
+      const nT = Math.max(2, Math.min(b - a + 1, Math.floor((W - ml - mr) / 80)));
+      const tickIdx = [...new Set(d3.range(nT).map((k) => Math.round(a + k * (b - a) / Math.max(1, nT - 1))))];
+      const fmtMD = d3.utcFormat(hi - lo > 250 ? '%y-%m' : '%m-%d');
+      const step = x(lo + 1) - x(lo);
+      const G = [];
+      for (const [L, yy, bb, ticks, cid] of [[L1, y, bot, y.ticks(5), 'clip-cd'], [L2, y2, bot2, y2.ticks(4), 'clip-tt']]) {
+        L.insert('g', ':first-child').attr('class', 'grid').attr('transform', `translate(${ml},0)`)
+          .call(d3.axisLeft(yy).tickValues(ticks).tickSize(-(W - ml - mr)).tickFormat(''));
+        const g = L.append('g').attr('clip-path', `url(#${cid})`);
+        g.append('g').selectAll('rect').data(days.map((d, i) => [d, i]).filter(([d, i]) => i >= i0 && i <= i1 && (d.modeBefore === 'REVERSE' || d.mode === 'REVERSE')))
+          .join('rect').attr('x', ([, i]) => x(i) - step / 2).attr('width', step).attr('y', yy === y ? top : 6)
+          .attr('height', yy === y ? bot - top : bot2 - 6).style('fill', 'var(--rev)');
+        L.append('g').attr('transform', `translate(0,${bb})`)
+          .call(d3.axisBottom(x).tickValues(tickIdx).tickFormat((i) => fmtMD(xs[i])).tickSizeOuter(0));
+        G.push(g);
+      }
+      const [g1, g2] = G;
+      const line = (acc) => d3.line().defined((d) => acc(d) > 0).x((d, i) => x(i)).y((d) => y(acc(d)));
+      g1.append('path').attr('d', line((d) => d.star || 0)(days)).attr('fill', 'none').style('stroke', 'var(--rev-ink)').attr('stroke-width', 1.4).attr('stroke-dasharray', '1.5 3').attr('stroke-linecap', 'round');
+      g1.append('path').attr('d', d3.line().defined((d) => d.avgBefore > 0).x((d, i) => x(i)).y((d) => y(d.avgBefore)).curve(d3.curveStepAfter)(days))
+        .attr('fill', 'none').style('stroke', 'var(--accent)').attr('stroke-width', 1.5).attr('stroke-dasharray', '5 3');
+      g1.append('path').attr('d', line((d) => d.close)(days)).attr('fill', 'none').style('stroke', 'var(--ink)').attr('stroke-width', 1.6);
+      const tri = d3.symbol().type(d3.symbolTriangle).size(zoomed && hi - lo < 60 ? 80 : 60);
+      g1.append('g').selectAll('path').data(marks.filter((m) => m.i >= i0 && m.i <= i1)).join('path').attr('d', tri)
+        .attr('transform', (m) => `translate(${x(m.i)},${y(m.f.price) + (m.f.side === 'buy' ? 9 : -9)}) rotate(${m.f.side === 'buy' ? 0 : 180})`)
+        .style('fill', (m) => (m.f.side === 'buy' ? 'var(--up)' : 'var(--down)'));
+      // T 차트
+      for (const [lv, lab] of [[n / 2, '후반전'], [n - 1, '소진']]) {
+        L2.append('line').attr('x1', ml).attr('x2', W - mr).attr('y1', y2(lv)).attr('y2', y2(lv)).style('stroke', 'var(--muted)').attr('stroke-dasharray', '4 3').attr('stroke-opacity', 0.7);
+        L2.append('text').attr('x', W - mr).attr('y', y2(lv) - 3).attr('text-anchor', 'end').style('fill', 'var(--muted)').style('font-size', '10.5px').text(`${lab} ${lv}`);
+      }
+      g2.append('path').attr('d', d3.line().x((d, i) => x(i)).y((d) => y2(d.T)).curve(d3.curveStepAfter)(days))
+        .attr('fill', 'none').style('stroke', 'var(--accent)').attr('stroke-width', 1.6);
+      cur = [L1.append('line').attr('y1', top).attr('y2', bot), L2.append('line').attr('y1', 6).attr('y2', bot2)]
+        .map((l) => l.style('stroke', 'var(--muted)').attr('stroke-dasharray', '3 3').attr('visibility', 'hidden'));
+    }
+
     function show(mx) {
-      const i = Math.max(0, Math.min(days.length - 1, Math.round(x.invert(mx))));
+      const i = Math.max(i0, Math.min(i1, Math.round(x.invert(mx))));
       const d = days[i], px = x(i);
       cur.forEach((l) => l.attr('x1', px).attr('x2', px).attr('visibility', 'visible'));
       tip.selectAll('*').remove();
       tip.append('div').attr('class', 'd').text(`${d.date} · ${i + 1}일째`);
+      const eq = d.cash + d.shares * d.close;
       const rows = [['종가', fmtMoney2(d.close)], ['평단(매매 전)', d.avgBefore > 0 ? fmtMoney2(d.avgBefore) : '—'],
         [d.modeBefore === 'REVERSE' ? '별지점(5일 평균)' : '별지점', d.star ? fmtMoney2(d.star) : '—'],
-        ['T', `${d.Tbefore.toFixed(3)} → ${d.T.toFixed(3)}`], ['보유', `${d.sharesBefore.toLocaleString()} → ${d.shares.toLocaleString()}주`]];
+        ['T', `${d.Tbefore.toFixed(3)} → ${d.T.toFixed(3)}`], ['보유', `${d.sharesBefore.toLocaleString()} → ${d.shares.toLocaleString()}주`],
+        ['평가금', `${fmtMoney(eq)} (${fmtPct((eq / startCapital - 1) * 100)})`]];
       for (const [k, v] of rows) { const rr = tip.append('div').attr('class', 'r'); rr.append('span').text(k); rr.append('b').text(v); }
       const ev = d.fills.map(fillText).concat(d.events.filter((e) => !/매수|매도/.test(e)));
       if (ev.length) tip.append('div').attr('class', 'ev').text(ev.join(' · '));
@@ -900,10 +1019,9 @@ table.daytbl .fillbox .s { font-family: var(--font-ui); }
       tip.style('left', Math.max(0, left) + 'px');
     }
     function hide() { tip.style('display', 'none'); cur.forEach((l) => l.attr('visibility', 'hidden')); }
-    for (const [s, h] of [[svg, H], [svg2, H2]]) {
-      s.append('rect').attr('x', ml).attr('y', 0).attr('width', W - ml - mr).attr('height', h).attr('fill', 'transparent')
-        .on('pointermove', (ev) => show(d3.pointer(ev)[0])).on('pointerleave', hide);
-    }
+    draw();
+    const zb = bindZoom(ov, zkey, N, 5, () => [ml + 6, W - mr - 6], () => { draw(); hide(); }, hide);
+    ov.on('pointermove', (ev) => { if (!zb.busy()) show(d3.pointer(ev)[0]); }).on('pointerleave', hide);
   }
 
   function fillText(f) {
@@ -963,7 +1081,7 @@ table.daytbl .fillbox .s { font-family: var(--font-ui); }
       if (badges.childElementCount) tdm.append(badges);
 
       const dT = d.T - d.Tbefore;
-      cell2(tr, d.T.toFixed(2), Math.abs(dT) < 1e-9 ? `${d.Tbefore.toFixed(2)} 유지` : `${d.Tbefore.toFixed(2)}에서 ${signed(dT)}`);
+      cell2(tr, d.T.toFixed(2), Math.abs(dT) < 1e-9 ? '유지' : signed(dT));
 
       if (d.star == null) cell2(tr, '—', '', '', 'muted');
       else cell2(tr, fmtMoney2(d.star), d.starPct != null ? `별 ${d.starPct.toFixed(2)}%` : '5일 평균');
@@ -1083,6 +1201,8 @@ table.daytbl .fillbox .s { font-family: var(--font-ui); }
   try { if (localStorage.getItem(SIDE_KEY) === '1') setCollapsed(true, false); } catch (e) {}
   $('cd-close').addEventListener('click', closeCycle);
   $('cd-prev').addEventListener('click', () => stepCycle(-1));
+  $('t-zoom').addEventListener('click', () => { delete S.zoom[S.eqKey]; renderCharts(); });
+  $('cd-zoom').addEventListener('click', () => { delete S.zoom[S.cdKey]; renderCycleDetail(); });
   $('cd-next').addEventListener('click', () => stepCycle(1));
   $('cd-only').addEventListener('click', () => { S.view.cdOnly = !S.view.cdOnly; renderCycleDetail(); });
   let lastW = 0;
