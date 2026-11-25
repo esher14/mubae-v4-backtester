@@ -59,6 +59,9 @@ a { color: var(--accent); }
 .xbtn.sm { font-size: 12px; padding: 2px 8px; }
 input, select, textarea { font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 7px; padding: 7px 9px; min-width: 0; width: 100%; box-sizing: border-box; }
 input.num { font-family: var(--font-num); }
+/* iOS 사파리 날짜 칸은 자체 너비를 고집해 옆 칸과 겹치므로 기본 모양을 끄고 칸 너비에 맞춘다 */
+input[type="date"] { -webkit-appearance: none; appearance: none; min-height: 2.35em; display: block; max-width: 100%; }
+input[type="date"]::-webkit-date-and-time-value { text-align: left; }
 input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--accent); margin: 0; flex: none; }
 input:focus-visible, select:focus-visible, button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }

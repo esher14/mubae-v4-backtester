@@ -39,8 +39,12 @@ h2 { font-size: 15px; font-weight: 600; margin: 0; text-wrap: balance; }
 
 /* 조건 패널 */
 .panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 18px; display: flex; flex-direction: column; gap: 14px; }
-.side { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 16px); }
-@media (max-width: 860px) { .side { position: static; } }
+.side { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 16px); align-self: start;
+  /* 화면보다 길면 사이드바만 따로 스크롤(커서가 올라간 쪽만 움직임) */
+  max-height: calc(100vh - 32px - env(safe-area-inset-top, 0px)); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+@media (max-width: 860px) { .side { position: static; max-height: none; overflow: visible; } }
+input[type="date"] { -webkit-appearance: none; appearance: none; min-height: 2.35em; display: block; max-width: 100%; }
+input[type="date"]::-webkit-date-and-time-value { text-align: left; }
 .field { display: flex; flex-direction: column; gap: 5px; }
 .field > span { font-size: 12px; color: var(--muted); font-weight: 500; }
 .field small { font-size: 11.5px; color: var(--muted); }
