@@ -175,7 +175,36 @@
   }
 
   function addDays(d, k) { const t = new Date(d + 'T00:00:00Z'); t.setUTCDate(t.getUTCDate() + k); return t.toISOString().slice(0, 10); }
-  function nextWeekday(d) { let x = addDays(d, 1); while ([0, 6].includes(new Date(x + 'T00:00:00Z').getUTCDay())) x = addDays(x, 1); return x; }
+  // 미국 정규장(NYSE) 휴장일을 규칙으로 계산한다. 임시 휴장(국장일 등)은 미리 알 수 없어 빠진다.
+  const ymd = (y, m, d) => new Date(Date.UTC(y, m - 1, d)).toISOString().slice(0, 10);
+  const nthDow = (y, m, dow, n) => { const f = new Date(Date.UTC(y, m - 1, 1)).getUTCDay(); return ymd(y, m, 1 + ((dow - f + 7) % 7) + 7 * (n - 1)); };
+  const lastDow = (y, m, dow) => { const l = new Date(Date.UTC(y, m, 0)); return ymd(y, m, l.getUTCDate() - ((l.getUTCDay() - dow + 7) % 7)); };
+  function observed(y, m, d) { const w = new Date(Date.UTC(y, m - 1, d)).getUTCDay(); return w === 6 ? ymd(y, m, d - 1) : w === 0 ? ymd(y, m, d + 1) : ymd(y, m, d); }
+  function easter(y) { // 그레고리력 부활절(Anonymous Gregorian)
+    const a = y % 19, b = Math.floor(y / 100), c = y % 100, d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25), g = Math.floor((b - f + 1) / 3);
+    const h = (19 * a + b - d - g + 15) % 30, i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7, m = Math.floor((a + 11 * h + 22 * l) / 451);
+    const mo = Math.floor((h + l - 7 * m + 114) / 31), da = ((h + l - 7 * m + 114) % 31) + 1;
+    return Date.UTC(y, mo - 1, da);
+  }
+  const holCache = {};
+  function nyseHolidays(y) {
+    if (holCache[y]) return holCache[y];
+    const s = new Set();
+    const ny = new Date(Date.UTC(y, 0, 1)).getUTCDay();
+    if (ny !== 6) s.add(observed(y, 1, 1)); // 토요일이면 전날(12/31) 대체 휴장 없음
+    s.add(nthDow(y, 1, 1, 3)); s.add(nthDow(y, 2, 1, 3));
+    s.add(new Date(easter(y) - 2 * 86400000).toISOString().slice(0, 10));
+    s.add(lastDow(y, 5, 1));
+    if (y >= 2022) s.add(observed(y, 6, 19));
+    s.add(observed(y, 7, 4)); s.add(nthDow(y, 9, 1, 1)); s.add(nthDow(y, 11, 4, 4)); s.add(observed(y, 12, 25));
+    return (holCache[y] = s);
+  }
+  function isHoliday(d) { return nyseHolidays(+d.slice(0, 4)).has(d); }
+  function nextWeekday(d) {
+    let x = addDays(d, 1);
+    while ([0, 6].includes(new Date(x + 'T00:00:00Z').getUTCDay()) || isHoliday(x)) x = addDays(x, 1);
+    return x;
+  }
 
   // 기록 전체를 처음부터 다시 계산한다
   function replay(tr, bars) {
@@ -272,5 +301,5 @@
     return n * inv / (inv + Math.max(0, cash));
   }
 
-  root.MubaeTracker = { ROLES, cfgOf, dayFee, orderRows, autoJudge, applyDay, replay, estimateT, nextWeekday, addDays };
+  root.MubaeTracker = { ROLES, cfgOf, dayFee, orderRows, autoJudge, applyDay, replay, estimateT, nextWeekday, addDays, isHoliday, nyseHolidays };
 })(typeof window !== 'undefined' ? window : globalThis);
