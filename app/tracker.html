@@ -49,6 +49,13 @@ a { color: var(--accent); }
 .btn:disabled { opacity: .5; cursor: default; }
 .xbtn { font: inherit; font-size: 12.5px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 7px; padding: 5px 10px; cursor: pointer; }
 .xbtn.danger { color: var(--up); }
+#sy-btn[data-state="on"] { color: var(--accent); border-color: var(--accent); }
+#sy-btn[data-state="need"], #sy-btn[data-state="error"] { color: var(--warn-ink); background: var(--warn-bg); }
+.sy-panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 12px 16px; font-size: 13px; display: flex; flex-direction: column; gap: 8px; }
+.sy-panel p { margin: 0; line-height: 1.55; }
+.sy-panel[hidden] { display: none; }
+.sy-btns { display: flex; flex-wrap: wrap; gap: 6px; }
+#sy-need .xbtn { margin-left: 4px; }
 .xbtn.sm { font-size: 12px; padding: 2px 8px; }
 input, select, textarea { font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 7px; padding: 7px 9px; min-width: 0; width: 100%; box-sizing: border-box; }
 input.num { font-family: var(--font-num); }
@@ -158,15 +165,18 @@ details[open] > summary { margin-bottom: 10px; }
   <header class="topbar">
     <div class="lead">
       <h1>무매 V4 기록장</h1>
-      <p>실제 체결을 기록하면 T·평단·잔금과 다음 거래일 주문표를 계산합니다. 기록은 <b>이 브라우저에만</b> 저장되고 어디에도 전송되지 않습니다.</p>
+      <p>실제 체결을 기록하면 T·평단·잔금과 다음 거래일 주문표를 계산합니다. 기록은 <b>이 브라우저</b>(파일 동기화를 켜면 내 PC의 동기화 파일에도)에만 저장되고 서버로 전송되지 않습니다.</p>
     </div>
     <div class="actions">
       <a class="xbtn" href="./" style="text-decoration:none">백테스터</a>
+      <button type="button" class="xbtn" id="sy-btn">파일 동기화</button>
       <button type="button" class="xbtn" id="bk-export">백업 파일 저장</button>
       <button type="button" class="xbtn" id="bk-import">백업 불러오기</button>
       <input type="file" id="bk-file" accept=".json,application/json" hidden>
     </div>
   </header>
+  <div class="sy-panel" id="sy-panel" hidden></div>
+  <p class="notice" id="sy-need" hidden></p>
   <p class="notice" id="bk-nudge" hidden></p>
   <p class="notice" id="store-warn" hidden>이 브라우저에서는 저장소를 쓸 수 없어 새로고침하면 기록이 사라집니다(사생활 보호 모드 등). 백업 파일 저장을 자주 해 주세요.</p>
 
@@ -354,11 +364,15 @@ details[open] > summary { margin-bottom: 10px; }
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
 <script src="engine.js"></script>
 <script src="tracker-core.js"></script>
+<script src="tracker-sync.js"></script>
 <script>
 (function () {
   const E = window.MubaeEngine, TK = window.MubaeTracker, R = TK.ROLES;
   const $ = (id) => document.getElementById(id);
   const KEY = 'mubae-tracker-v1', UI_KEY = 'mubae-tracker-ui-v1';
+  const SY = window.MubaeSync;
+  // state: off(연결 없음) · on · need(접근 허락 필요) · error · unsupported
+  const SYNC = { h: null, name: '', state: 'off', err: '', lastAt: null, lastMod: 0, busy: null, again: false };
   const fmtMoney = (v) => (v < 0 ? '-$' : '$') + d3.format(',.2f')(Math.abs(v)); // 기록장 금액은 모두 센트까지 표시
   const fmtMoney2 = (v) => (v < 0 ? '-$' : '$') + d3.format(',.2f')(Math.abs(v));
   const fmtAvg = (v) => '$' + d3.format(',.4f')(v); // 평단 화면 표시는 4자리. 계산·저장은 원래 값 그대로
@@ -378,12 +392,16 @@ details[open] > summary { margin-bottom: 10px; }
     return { version: 1, trackers: [], lastExport: null, lastChange: null };
   }
   const DB = load();
-  function save() {
-    DB.lastChange = new Date().toISOString();
+  function persistLocal() {
     try { localStorage.setItem(KEY, JSON.stringify(DB)); storeOk = true; } catch (e) { storeOk = false; }
     $('store-warn').hidden = storeOk;
+  }
+  function save() {
+    DB.lastChange = new Date().toISOString();
+    persistLocal();
     try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) { /* 무시 */ }
     nudge();
+    scheduleSync();
   }
   const ui = (() => { try { return JSON.parse(localStorage.getItem(UI_KEY) || '{}'); } catch (e) { return {}; } })();
   function saveUi() { try { localStorage.setItem(UI_KEY, JSON.stringify(ui)); } catch (e) { /* 무시 */ } }
@@ -1117,7 +1135,7 @@ details[open] > summary { margin-bottom: 10px; }
     const last = DB.lastExport ? Date.parse(DB.lastExport) : 0;
     const changedAfter = DB.lastChange && Date.parse(DB.lastChange) > last;
     const days = (Date.now() - last) / 864e5;
-    el.hidden = !(changedAfter && days > 7);
+    el.hidden = !(changedAfter && days > 7) || (SYNC.state === 'on' && !!SYNC.lastAt); // 동기화 파일이 자동 백업 역할
     el.textContent = last ? `마지막 백업이 ${Math.floor(days)}일 전입니다. 브라우저 데이터를 지우면 기록이 사라지니 백업 파일을 저장해 두세요.` : '아직 백업한 적이 없습니다. 브라우저 데이터를 지우면 기록이 사라지니 백업 파일을 저장해 두세요.';
   }
   $('bk-export').addEventListener('click', () => {
@@ -1151,6 +1169,162 @@ details[open] > summary { margin-bottom: 10px; }
     if (S.cur) select(S.cur); else render();
   });
 
+  // ---------- 파일 동기화 ----------
+  // 동기화 폴더(원드라이브 등)의 JSON 파일을 직접 읽고 쓴다. 브라우저 저장소가 항상 먼저이고 파일은 사본.
+  // base = 마지막으로 파일과 맞춘 상태. 이를 기준으로 3방향 병합해 다른 PC의 추가·수정·삭제를 반영한다.
+  const BASE_KEY = 'mubae-tracker-sync-base-v1', SNAP_KEY = 'mubae-tracker-presync-v1';
+  function readBase() { try { const j = JSON.parse(localStorage.getItem(BASE_KEY) || 'null'); return j && Array.isArray(j.trackers) ? j : null; } catch (e) { return null; } }
+  function writeBase(trackers, lastMod) { try { localStorage.setItem(BASE_KEY, JSON.stringify({ trackers, lastMod, at: new Date().toISOString() })); } catch (e) { /* 무시 */ } }
+  function clearBase() { try { localStorage.removeItem(BASE_KEY); } catch (e) { /* 무시 */ } }
+
+  async function afterRemoteChange() {
+    if (!DB.trackers.some((t) => t.id === S.cur)) { S.cur = DB.trackers.length ? DB.trackers[0].id : null; ui.cur = S.cur; saveUi(); }
+    if (S.cur) { S.edit = null; await refresh(true); } else { render(); }
+  }
+  function syncNow() {
+    if (!SYNC.h || SYNC.state === 'need') return Promise.resolve();
+    if (SYNC.busy) { SYNC.again = true; return SYNC.busy; }
+    SYNC.busy = (async () => {
+      try {
+        const { text, lastModified } = await SY.readFile(SYNC.h);
+        const p = SY.parseFile(text);
+        if (p.error) { SYNC.state = 'error'; SYNC.err = `동기화 파일을 읽지 못해 아무것도 쓰지 않았습니다(${p.error}). 다른 파일을 연결하세요.`; return; }
+        const base = readBase();
+        const baseTr = base ? base.trackers : null;
+        const local = DB.trackers;
+        let m = SY.merge3(baseTr, local, p.trackers, 'local');
+        if (m.conflicts.length) {
+          const list = m.conflicts.slice(0, 8).map((c) => `· ${c.name} ${c.date || '(설정)'}`).join('\n');
+          const useLocal = confirm(`이 PC와 동기화 파일에서 같은 항목을 서로 다르게 고쳤습니다(${m.conflicts.length}건).\n${list}${m.conflicts.length > 8 ? '\n…' : ''}\n\n[확인] 이 PC의 내용 사용\n[취소] 동기화 파일의 내용 사용\n\n나머지 항목은 양쪽 변경이 모두 반영됩니다.`);
+          if (!useLocal) m = SY.merge3(baseTr, local, p.trackers, 'remote');
+        }
+        const changedLocal = !SY.same(m.trackers, local);
+        const changedFile = !!p.empty || !SY.same(m.trackers, p.trackers);
+        if (changedLocal) {
+          // 파일 내용으로 바꾸기 전 이 PC 상태를 보관
+          try { localStorage.setItem(SNAP_KEY, JSON.stringify({ at: new Date().toISOString(), trackers: local })); } catch (e) { /* 무시 */ }
+          DB.trackers = m.trackers;
+          persistLocal();
+        }
+        let mod = lastModified;
+        if (changedFile) mod = await SY.writeFile(SYNC.h, SY.fileText(m.trackers));
+        writeBase(m.trackers, mod);
+        SYNC.lastMod = mod; SYNC.lastAt = new Date(); SYNC.state = 'on'; SYNC.err = '';
+        if (m.kept.length) toast(`다른 쪽에서 지웠지만 이 쪽에서 고친 무매 ${m.kept.length}개는 남겨 두었습니다`);
+        else if (changedLocal) toast('동기화 파일의 변경 내용을 가져왔습니다');
+        if (changedLocal) await afterRemoteChange();
+      } catch (e) {
+        const nm = e && e.name;
+        if (nm === 'NotAllowedError' || nm === 'SecurityError') SYNC.state = 'need';
+        else if (nm === 'NotFoundError') { SYNC.state = 'error'; SYNC.err = '동기화 파일을 찾을 수 없습니다(이동·삭제·이름 변경). 파일을 다시 연결하세요.'; }
+        else { SYNC.state = 'error'; SYNC.err = '동기화하지 못했습니다: ' + ((e && e.message) || e) + ' 클라우드 앱이 파일을 쓰는 중일 수 있으니 잠시 뒤 "지금 동기화"를 눌러 보세요.'; }
+      } finally {
+        SYNC.busy = null;
+        renderSync(); nudge();
+        if (SYNC.again) { SYNC.again = false; syncNow(); }
+      }
+    })();
+    return SYNC.busy;
+  }
+  function scheduleSync() {
+    if (SYNC.state !== 'on' && SYNC.state !== 'error') return;
+    clearTimeout(scheduleSync.h);
+    scheduleSync.h = setTimeout(syncNow, 600);
+  }
+  async function connectSync(kind) {
+    let h;
+    try { h = kind === 'new' ? await SY.pickNew() : await SY.pickExisting(); } catch (e) { if (e && e.name !== 'AbortError') toast('파일을 열지 못했습니다: ' + e.message); return; }
+    try { if (!(await SY.permission(h, true))) { toast('파일 쓰기를 허락해야 동기화할 수 있습니다'); return; } } catch (e) { toast('파일 권한을 받지 못했습니다'); return; }
+    let sameFile = false;
+    try { sameFile = !!(SYNC.h && await SYNC.h.isSameEntry(h)); } catch (e) { /* 무시 */ }
+    if (!sameFile) clearBase(); // 다른 파일이면 처음 연결로 보고 양쪽을 합친다
+    try { await SY.putHandle(h); } catch (e) { /* 다음 방문 때 다시 연결해야 할 뿐 */ }
+    Object.assign(SYNC, { h, name: h.name, state: 'on', err: '', lastAt: null });
+    renderSync();
+    await syncNow();
+    if (SYNC.state === 'on') toast(`"${h.name}"과 동기화했습니다`);
+  }
+  async function reconnectSync() {
+    if (!SYNC.h) return;
+    try { if (!(await SY.permission(SYNC.h, true))) { toast('파일 접근을 허락하지 않았습니다'); return; } } catch (e) { toast('파일 권한을 받지 못했습니다'); return; }
+    SYNC.state = 'on'; renderSync();
+    await syncNow();
+  }
+  async function disconnectSync() {
+    if (!confirm('동기화 파일 연결을 끊을까요? 이 PC의 기록과 파일은 그대로 남고, 이후 변경만 파일에 저장되지 않습니다.')) return;
+    await SY.delHandle(); clearBase();
+    Object.assign(SYNC, { h: null, name: '', state: 'off', err: '', lastAt: null, lastMod: 0 });
+    renderSync(); nudge();
+  }
+  function renderSync() {
+    const btn = $('sy-btn'), panel = $('sy-panel'), need = $('sy-need');
+    btn.dataset.state = SYNC.state;
+    btn.textContent = SYNC.state === 'on' ? '파일 동기화 ●' : SYNC.state === 'need' || SYNC.state === 'error' ? '파일 동기화 !' : '파일 동기화';
+    need.hidden = SYNC.state !== 'need' && SYNC.state !== 'error';
+    if (!need.hidden) {
+      need.replaceChildren();
+      const t = document.createElement('span');
+      t.textContent = SYNC.state === 'need' ? `동기화 파일 "${SYNC.name}"에 다시 접근하려면 허락이 필요합니다. ` : SYNC.err + ' ';
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'xbtn sm';
+      b.textContent = SYNC.state === 'need' ? '파일 다시 연결' : '지금 동기화';
+      b.addEventListener('click', () => (SYNC.state === 'need' ? reconnectSync() : (SYNC.state = 'on', syncNow())));
+      need.append(t, b);
+    }
+    panel.replaceChildren();
+    const p = (html) => { const e = document.createElement('p'); e.innerHTML = html; panel.append(e); return e; };
+    const btns = () => { const d = document.createElement('div'); d.className = 'sy-btns'; panel.append(d); return d; };
+    const mk = (parent, label, fn, cls) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'xbtn' + (cls ? ' ' + cls : ''); b.textContent = label; b.addEventListener('click', fn); parent.append(b); return b; };
+    if (SYNC.state === 'unsupported') {
+      p('<b>이 브라우저는 파일 동기화를 지원하지 않습니다.</b> PC의 크롬·엣지에서 쓸 수 있습니다(휴대폰·사파리·파이어폭스 불가). 이 브라우저에서는 백업 파일 저장·불러오기를 이용하세요.');
+      return;
+    }
+    if (!SYNC.h) {
+      p('<b>여러 PC에서 같은 기록 쓰기</b> — 원드라이브·구글 드라이브·드롭박스 같은 <b>PC 동기화 폴더</b> 안의 파일 하나에 기록을 자동 저장하고, 다른 PC에서 같은 파일을 연결하면 기록이 합쳐집니다. 서버를 거치지 않고 이 PC의 파일에만 씁니다.');
+      p('처음 쓰는 PC는 <b>새 동기화 파일 만들기</b>로 동기화 폴더에 파일을 만들고, 다른 PC에서는 <b>기존 파일 연결</b>로 같은 파일을 고르세요. 브라우저가 물으면 "방문할 때마다 허용"을 고르면 다음부터 다시 묻지 않습니다.');
+      const d = btns();
+      mk(d, '새 동기화 파일 만들기', () => connectSync('new'));
+      mk(d, '기존 파일 연결', () => connectSync('open'));
+      p('<span class="muted">확인된 동기화 서비스: OneDrive. 같은 방식의 다른 서비스도 원리상 동작합니다. 두 PC에서 동기화가 끝나기 전에 각각 고치면 클라우드 앱이 충돌 사본 파일을 만들 수 있는데, 그 파일은 "백업 불러오기"로 확인할 수 있습니다.</span>');
+      return;
+    }
+    const st = SYNC.state === 'on' ? (SYNC.lastAt ? `마지막 동기화 ${SYNC.lastAt.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}` : '동기화 중…') : SYNC.state === 'need' ? '접근 허락 필요' : '오류';
+    const e = p(''); const b = document.createElement('b'); b.textContent = `연결된 파일: ${SYNC.name}`; e.append(b, document.createTextNode(` · ${st}`));
+    if (SYNC.lastMod) p(`<span class="muted">파일 수정 시각 ${new Date(SYNC.lastMod).toLocaleString('ko-KR')} · 기록을 저장할 때마다, 그리고 이 창으로 돌아올 때 파일과 맞춥니다.</span>`);
+    const d = btns();
+    if (SYNC.state === 'need') mk(d, '파일 다시 연결', reconnectSync);
+    else mk(d, '지금 동기화', () => { SYNC.state = 'on'; syncNow(); });
+    mk(d, '다른 파일로 바꾸기', () => connectSync('open'));
+    mk(d, '연결 끊기', disconnectSync, 'danger');
+    let snap = null; try { snap = JSON.parse(localStorage.getItem(SNAP_KEY) || 'null'); } catch (x) { /* 무시 */ }
+    if (snap && Array.isArray(snap.trackers)) {
+      mk(d, '직전 상태로 되돌리기', () => {
+        if (!confirm(`파일 내용을 가져오기 직전(${new Date(snap.at).toLocaleString('ko-KR')}) 이 PC의 기록으로 되돌릴까요? 되돌린 내용이 동기화 파일에도 저장됩니다.`)) return;
+        DB.trackers = snap.trackers;
+        try { localStorage.removeItem(SNAP_KEY); } catch (x) { /* 무시 */ }
+        save(); afterRemoteChange(); toast('직전 상태로 되돌렸습니다');
+      });
+    }
+  }
+  $('sy-btn').addEventListener('click', () => { $('sy-panel').hidden = !$('sy-panel').hidden; renderSync(); });
+  let lastFocusSync = 0;
+  const onBack = () => {
+    if (document.visibilityState !== 'visible' || SYNC.state !== 'on' || Date.now() - lastFocusSync < 3000) return;
+    lastFocusSync = Date.now(); syncNow();
+  };
+  document.addEventListener('visibilitychange', onBack);
+  window.addEventListener('focus', onBack);
+  async function initSync() {
+    if (!SY.supported()) { SYNC.state = 'unsupported'; renderSync(); return; }
+    const h = await SY.getHandle();
+    if (!h) { renderSync(); return; }
+    SYNC.h = h; SYNC.name = h.name;
+    let ok = false;
+    try { ok = await SY.permission(h, false); } catch (e) { ok = false; }
+    SYNC.state = ok ? 'on' : 'need';
+    renderSync();
+    if (ok) syncNow();
+  }
+
   // ---------- 시작 ----------
   updSetup();
   $('store-warn').hidden = storeOk;
@@ -1163,6 +1337,7 @@ details[open] > summary { margin-bottom: 10px; }
   }).observe($('a-eq'));
   if (DB.trackers.length) select(DB.trackers.some((t) => t.id === ui.cur) ? ui.cur : DB.trackers[0].id);
   else { render(); openSetup(); }
+  initSync();
 })();
 </script>
 </body>

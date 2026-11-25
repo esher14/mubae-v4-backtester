@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><title>기록장 동기화 병합 검증</title></head>
+<body>
+<pre id="out">실행 중…</pre>
+<script src="app/tracker-sync.js"></script>
+<script>
+// 저장소 루트에서 python -m http.server 후 열기. 3방향 병합 규칙 검증.
+const S = window.MubaeSync, lines = []; let fail = 0;
+const rec = (date, close, extra) => Object.assign({ date, close, fills: [], note: '' }, extra || {});
+const tr = (id, recs, extra) => Object.assign({ id, name: id, ticker: 'SOXL', n: 20, target: 20, start: { kind: 'fresh', begin: '2026-11-02', cash: 1000 }, records: recs }, extra || {});
+const dates = (t) => t ? t.records.map((r) => r.date + ':' + r.close).join(',') : '(없음)';
+function check(name, got, want) { const ok = S.stable(got) === S.stable(want); if (!ok) fail++; lines.push(`${ok ? 'OK  ' : 'FAIL'} ${name}${ok ? '' : `\n     기대 ${S.stable(want)}\n     결과 ${S.stable(got)}`}`); }
+const find = (m, id) => m.trackers.find((t) => t.id === id);
+
+const base = [tr('A', [rec('d1', 1), rec('d2', 2)]), tr('B', [rec('d1', 9)])];
+
+// 1. 양쪽 같음
+let m = S.merge3(base, base, base, 'local');
+check('변경 없음', [m.trackers, m.conflicts.length], [base, 0]);
+// 2. 이 PC에서 기록 추가, 파일에서 다른 기록 추가 → 둘 다
+m = S.merge3(base, [tr('A', [rec('d1', 1), rec('d2', 2), rec('d3', 3)]), base[1]], [tr('A', [rec('d1', 1), rec('d2', 2), rec('d4', 4)]), base[1]], 'local');
+check('양쪽 추가 합치기', dates(find(m, 'A')), 'd1:1,d2:2,d3:3,d4:4');
+// 3. 이 PC에서 지운 기록, 파일은 그대로 → 삭제
+m = S.merge3(base, [tr('A', [rec('d1', 1)]), base[1]], base, 'local');
+check('이 PC 삭제 반영', dates(find(m, 'A')), 'd1:1');
+// 4. 파일에서 지운 기록 → 삭제
+m = S.merge3(base, base, [tr('A', [rec('d2', 2)]), base[1]], 'local');
+check('파일 쪽 삭제 반영', dates(find(m, 'A')), 'd2:2');
+// 5. 한쪽만 수정 → 수정 반영, 충돌 없음
+m = S.merge3(base, base, [tr('A', [rec('d1', 1.5), rec('d2', 2)]), base[1]], 'local');
+check('파일 쪽 수정 반영', [dates(find(m, 'A')), m.conflicts.length], ['d1:1.5,d2:2', 0]);
+// 6. 같은 날짜를 서로 다르게 수정 → 충돌 1건, prefer 따름
+const L6 = [tr('A', [rec('d1', 1.1), rec('d2', 2)]), base[1]], R6 = [tr('A', [rec('d1', 1.2), rec('d2', 2)]), base[1]];
+m = S.merge3(base, L6, R6, 'local');
+check('충돌: 이 PC 선택', [dates(find(m, 'A')), m.conflicts.map((c) => c.date)], ['d1:1.1,d2:2', ['d1']]);
+m = S.merge3(base, L6, R6, 'remote');
+check('충돌: 파일 선택', dates(find(m, 'A')), 'd1:1.2,d2:2');
+// 7. 같은 날짜를 똑같이 수정 → 충돌 아님
+m = S.merge3(base, L6, L6, 'local');
+check('같은 수정은 충돌 아님', m.conflicts.length, 0);
+// 8. 한쪽 수정 vs 다른 쪽 삭제(같은 날짜) → 충돌
+m = S.merge3(base, [tr('A', [rec('d1', 1.1), rec('d2', 2)]), base[1]], [tr('A', [rec('d2', 2)]), base[1]], 'local');
+check('수정 vs 삭제 충돌', [m.conflicts.length, dates(find(m, 'A'))], [1, 'd1:1.1,d2:2']);
+// 9. 무매 삭제(상대는 그대로) → 삭제
+m = S.merge3(base, [base[0]], base, 'local');
+check('무매 삭제 반영', m.trackers.map((t) => t.id), ['A']);
+// 10. 무매 삭제 vs 다른 쪽에서 수정 → 남김
+m = S.merge3(base, [base[0]], [base[0], tr('B', [rec('d1', 9), rec('d2', 10)])], 'local');
+check('삭제 vs 수정이면 남김', [m.trackers.map((t) => t.id), m.kept.length], [['A', 'B'], 1]);
+// 11. 새 무매 양쪽에서 각각 → 둘 다
+m = S.merge3(base, base.concat([tr('C', [])]), base.concat([tr('D', [])]), 'local');
+check('새 무매 합치기', m.trackers.map((t) => t.id), ['A', 'B', 'C', 'D']);
+// 12. 설정 수정(이름) 한쪽 + 기록 추가 다른 쪽 → 둘 다
+m = S.merge3(base, [tr('A', [rec('d1', 1), rec('d2', 2)], { name: '새이름' }), base[1]], [tr('A', [rec('d1', 1), rec('d2', 2), rec('d3', 3)]), base[1]], 'local');
+check('설정 수정 + 기록 추가', [find(m, 'A').name, dates(find(m, 'A')), m.conflicts.length], ['새이름', 'd1:1,d2:2,d3:3', 0]);
+// 13. 설정을 서로 다르게 → 설정 충돌
+m = S.merge3(base, [tr('A', base[0].records, { target: 15 }), base[1]], [tr('A', base[0].records, { target: 25 }), base[1]], 'remote');
+check('설정 충돌', [m.conflicts.map((c) => c.kind), find(m, 'A').target], [['meta'], 25]);
+// 14. 처음 연결(base 없음): 같은 무매 다른 기록 → 날짜별 합치기, 다른 값은 충돌
+m = S.merge3(null, [tr('A', [rec('d1', 1), rec('d2', 2)])], [tr('A', [rec('d1', 1), rec('d3', 3)]), tr('E', [])], 'local');
+check('처음 연결 합치기', [dates(find(m, 'A')), m.trackers.map((t) => t.id), m.conflicts.length], ['d1:1,d2:2,d3:3', ['A', 'E'], 0]);
+// 15. 처음 연결, 빈 파일
+m = S.merge3(null, base, [], 'local');
+check('처음 연결 빈 파일', m.trackers, base);
+// 16. 키 순서 차이는 같은 값
+const reorder = JSON.parse(JSON.stringify(base)); reorder[0].records[0] = { note: '', fills: [], close: 1, date: 'd1' };
+m = S.merge3(base, reorder, base, 'local');
+check('키 순서 무시', m.conflicts.length, 0);
+// 17. 기록 날짜순 정렬
+m = S.merge3(null, [tr('A', [rec('d3', 3)])], [tr('A', [rec('d1', 1)])], 'local');
+check('날짜순 정렬', dates(find(m, 'A')), 'd1:1,d3:3');
+// 18. 결과가 입력을 건드리지 않음
+const snap = JSON.stringify(base); S.merge3(base, base, base, 'local'); check('입력 불변', JSON.stringify(base), snap);
+// 파일 형식
+check('빈 파일', S.parseFile('').empty, true);
+check('잘못된 JSON', !!S.parseFile('{x').error, true);
+check('다른 앱 파일', !!S.parseFile('{"app":"x","trackers":[]}').error, true);
+check('왕복', S.parseFile(S.fileText(base)).trackers, base);
+
+lines.unshift(fail ? `실패 ${fail}건` : `모두 통과 (${lines.length}건)`);
+document.getElementById('out').textContent = lines.join('\n');
+document.title = fail ? 'FAIL' : 'PASS';
+</script>
+</body></html>
