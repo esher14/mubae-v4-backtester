@@ -67,8 +67,10 @@ input:focus-visible, select:focus-visible, button:focus-visible, textarea:focus-
 .tabs { display: flex; flex-wrap: wrap; gap: 6px; }
 .tab { font: inherit; font-size: 13px; border: 1px solid var(--line); background: var(--panel); color: var(--muted); border-radius: 999px; padding: 5px 12px; cursor: pointer; }
 .tab[aria-selected="true"] { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); font-weight: 600; }
-.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; }
-.kpi { background: var(--panel); padding: 13px 16px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.kgroups { display: flex; flex-direction: column; gap: 14px; }
+.kgrp-h { font-size: 12.5px; font-weight: 600; color: var(--muted); margin: 0 0 6px 2px; letter-spacing: 0.02em; }
+.kpis { display: flex; flex-wrap: wrap; gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; }
+.kpi { flex: 1 1 170px; background: var(--panel); padding: 13px 16px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .kpi .k { font-size: 12px; color: var(--muted); }
 .kpi .v { font-family: var(--font-num); font-size: 21px; font-weight: 500; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .kpi .s { font-size: 11.5px; color: var(--muted); font-family: var(--font-num); }
@@ -233,7 +235,7 @@ details[open] > summary { margin-bottom: 10px; }
         <div class="statebar" id="v-sub"></div>
       </div>
     </div>
-    <div class="kpis" id="v-kpis"></div>
+    <div class="kgroups" id="v-kpis"></div>
     <div id="v-warn" style="display:flex;flex-direction:column;gap:6px"></div>
 
     <div class="cols">
@@ -545,10 +547,20 @@ details[open] > summary { margin-bottom: 10px; }
     return d;
   }
   function renderKpis(tr, rp) {
-    const el = $('v-kpis'); el.replaceChildren();
+    const root = $('v-kpis'); root.replaceChildren();
+    const group = (title) => {
+      const w = document.createElement('div');
+      const h = document.createElement('div'); h.className = 'kgrp-h'; h.textContent = title;
+      const g = document.createElement('div'); g.className = 'kpis';
+      w.append(h, g); root.append(w); return g;
+    };
     const st = rp.state, n = rp.cfg.n;
     const holding = st.shares > 0;
-    // 모드·T
+    const mc = rp.markClose;
+    const o = rp.nextOrders;
+
+    // ── 무매 진행: 모드·T, 별지점, 종가, 1회 매수금, 현재 사이클
+    let el = group('무매 진행');
     const d = kpi(el, '모드 · T', holding ? fmtT(st.T) : '대기', null);
     if (holding) d.querySelector('.v').title = `T 원래 값: ${st.T}`;
     const chip = document.createElement('span');
@@ -561,28 +573,37 @@ details[open] > summary { margin-bottom: 10px; }
     const mk2 = document.createElement('b'); mk2.style.left = ((n - 1) / n * 100) + '%';
     bar.append(fillI, mk1, mk2); d.append(bar);
     const s1 = document.createElement('div'); s1.className = 's'; s1.textContent = `${n}분할 · 후반전 ${n / 2} · 소진 ${n - 1}`; d.append(s1);
-    // 평단·종가
-    const mc = rp.markClose;
-    const pa = kpi(el, '평단', holding ? fmtAvg(st.avg) : '—', `보유 ${st.shares.toLocaleString()}주${holding ? ` · 매입금 ${fmtMoney2(st.shares * st.avg)}` : ''}`);
-    if (holding) pa.querySelector('.v').title = `평단 원래 값: ${st.avg}`;
-    if (mc) {
-      const vsAvg = holding ? (mc / st.avg - 1) * 100 : null;
-      kpi(el, `${tr.ticker} 종가 (${rp.markDate})`, fmtMoney2(mc), vsAvg == null ? '보유 없음' : `평단 대비 ${fmtPct(vsAvg)}`, '');
-    } else kpi(el, `${tr.ticker} 종가`, '—', '가격 데이터 없음');
-    kpi(el, '잔금', fmtMoney2(st.cash), holding && st.mode === 'NORMAL' ? `1회 매수금 ${fmtMoney2(st.cash / Math.max(n - st.T, 1e-9))}` : !holding ? `첫 매수 ${fmtMoney2(st.cash / n)}` : `리버스 1회 ${fmtMoney2(st.cash / 4)}`);
-    // 평가
-    if (mc) {
-      const eq = st.cash + st.shares * mc;
-      const upnl = holding ? st.shares * (mc - st.avg) : 0;
-      kpi(el, `평가금 (${rp.markDate} 종가)`, fmtMoney(eq), holding ? `평가손익 ${signedMoney(upnl)} (${fmtPct((mc / st.avg - 1) * 100)})` : '잔금만 보유', '');
-    } else kpi(el, '평가금', '—', '가격 데이터 없음');
-    // 사이클
+    // 별지점(다음 거래일 주문 기준)
+    const nd = rp.nextDate ? ` (${rp.nextDate})` : '';
+    if (o && o.star != null) {
+      const sub = o.starPct != null
+        ? `별% ${fmtPct(o.starPct)}${o.limitSell ? ` · 목표가 ${fmtMoney2(o.limitSell[0])}` : ''}`
+        : '5일 종가 평균';
+      kpi(el, `별지점${nd}`, fmtMoney2(o.star), sub);
+    } else kpi(el, `별지점${nd}`, '—', !holding ? '첫 매수일' : '리버스 1일차 (MOC 매도)');
+    // 종가
+    if (mc) kpi(el, `${tr.ticker} 종가 (${rp.markDate})`, fmtMoney2(mc), holding ? `평단 대비 ${fmtPct((mc / st.avg - 1) * 100)}` : '보유 없음');
+    else kpi(el, `${tr.ticker} 종가`, '—', '가격 데이터 없음');
+    // 1회 매수금
+    kpi(el, '1회 매수금', o && o.amt ? fmtMoney2(o.amt) : '—',
+      !holding ? `잔금 ÷ ${n}` : st.mode === 'REVERSE' ? '리버스: 잔금 ÷ 4' : `잔금 ÷ (${n} − T)`);
+    // 현재 사이클
     const oc = rp.openCycle;
     if (oc && mc) {
-      const eq = st.cash + st.shares * mc;
-      const r = (eq / oc.startCapital - 1) * 100;
-      kpi(el, `${oc.no}번째 사이클${oc.mid ? ' (중간 진입)' : ''}`, fmtPct(r), `${oc.start} 시작 · ${oc.days}거래일 · 시작 ${fmtMoney(oc.startCapital)}`, cls(r));
-    } else kpi(el, '사이클', `${rp.cycles.length}회 완료`, '현재 진행 중인 사이클 없음');
+      const r = (st.cash + st.shares * mc) / oc.startCapital * 100 - 100;
+      kpi(el, `${oc.no}번째 사이클${oc.mid ? ' (중간 진입)' : ''}`, fmtPct(r), `${oc.start}부터 ${oc.days}거래일`, cls(r));
+    } else kpi(el, '사이클', `${rp.cycles.length}회 완료`, '진행 중인 사이클 없음');
+
+    // ── 내 계좌: 보유, 평단, 잔금, 평가금, 누적 실현손익
+    el = group('내 계좌');
+    kpi(el, '보유 수량', `${st.shares.toLocaleString()}주`, holding && mc ? `평가액 ${fmtMoney2(st.shares * mc)}` : '');
+    const pa = kpi(el, '평단', holding ? fmtAvg(st.avg) : '—', holding ? `매입금 ${fmtMoney2(st.shares * st.avg)}` : '');
+    if (holding) pa.querySelector('.v').title = `평단 원래 값: ${st.avg}`;
+    kpi(el, '잔금', fmtMoney2(st.cash), mc ? `평가금의 ${((st.cash / (st.cash + st.shares * mc)) * 100).toFixed(1)}%` : '');
+    if (mc) {
+      const upnl = holding ? st.shares * (mc - st.avg) : 0;
+      kpi(el, `평가금`, fmtMoney(st.cash + st.shares * mc), holding ? `평가손익 ${signedMoney(upnl)}` : '잔금만 보유', '');
+    } else kpi(el, '평가금', '—', '가격 데이터 없음');
     kpi(el, '누적 실현손익', fmtMoney2(rp.cumRealized), `완료 사이클 ${rp.cycles.length}회`, cls(rp.cumRealized));
   }
 
