@@ -33,7 +33,8 @@ class Config:
     start: str | None = None       # 시작일(첫 매수일). None이면 데이터 처음
     end: str | None = None         # 종료일. None이면 데이터 끝
     compound: bool = True          # True=복리(사이클 종료 금액 전부 재투입), False=단리(원금 초과분 인출)
-    fee_rate: float = 0.0          # 매매 수수료율(편도, 예: 0.0007 = 0.07%)
+    fee_rate: float = 0.0          # 수수료율(예: 0.0007 = 0.07%). 그날 매수·매도별 체결금액 합계에 적용, 센트 미만 버림
+    sec_rate: float = 0.0          # 매도 제세금율(예: 0.0000206). 그날 매도 합계에 적용, 센트 미만 올림
     tick: float = 0.01             # 매수점 = 별지점 - tick
     tick_exempt_below: float = 2.0 # 전일 종가가 이 값 미만이면 tick 미적용
 
@@ -84,6 +85,15 @@ class Orders:
         if self.limit_sell and self.limit_sell[1] > 0:
             out.append(f"[지정가 매도] ${self.limit_sell[0]:.2f} x {self.limit_sell[1]}주")
         return out
+
+
+def day_fee(gross: float, side: str, rate: float, sec: float) -> float:
+    """증권사 정산 방식 수수료. 평단에는 넣지 않고 잔금에만 반영한다."""
+    if gross <= 0:
+        return 0.0
+    base_c = math.floor(gross * rate * 100 + 1e-7)
+    tax_c = math.ceil(gross * sec * 100 - 1e-7) if side == "sell" and sec > 0 else 0
+    return (base_c + tax_c) / 100
 
 
 def _r(x: float, tick: float) -> float:
@@ -154,7 +164,7 @@ class Result:
 
 def run(cfg: Config, bars: list[Bar], keep_daily: bool = True) -> Result:
     n, tgt = cfg.n, cfg.target_pct()
-    fee = cfg.fee_rate
+    fee, sec = cfg.fee_rate, cfg.sec_rate
     idx = [i for i, b in enumerate(bars)
            if (cfg.start is None or b.date >= cfg.start) and (cfg.end is None or b.date <= cfg.end)]
     if not idx:
@@ -171,17 +181,21 @@ def run(cfg: Config, bars: list[Bar], keep_daily: bool = True) -> Result:
            "tick_exempt_days": 0}
     max_T = 0.0
 
+    gross_day = {"buy": 0.0, "sell": 0.0}
+
     def buy(q: int, price: float):
         cost = q * price
         st.avg = (st.avg * st.shares + cost) / (st.shares + q)
         st.shares += q
-        st.cash -= cost * (1 + fee)
+        st.cash -= cost  # 수수료는 그날 합계로 따로 뺀다
+        gross_day["buy"] += cost
 
     def sell(q: int, price: float) -> float:
         q = min(q, st.shares)
         gross = q * price
-        st.cash += gross * (1 - fee)
-        pnl = q * (price - st.avg) - gross * fee
+        st.cash += gross
+        gross_day["sell"] += gross
+        pnl = q * (price - st.avg)
         st.shares -= q
         if st.shares == 0:
             st.avg = 0.0
@@ -209,6 +223,7 @@ def run(cfg: Config, bars: list[Bar], keep_daily: bool = True) -> Result:
         mode_before, T_before = st.mode, st.T
         C = b.close
         events, realized = [], 0.0
+        gross_day = {"buy": 0.0, "sell": 0.0}
         sold_limit = sold_loc = sold_moc = False
 
         # 1) 장중 지정가 매도
@@ -243,6 +258,11 @@ def run(cfg: Config, bars: list[Bar], keep_daily: bool = True) -> Result:
             if bought > 0:
                 buy(bought, C)
                 events.append(f"LOC매수 {bought}@{C:.2f}")
+        # 3-1) 그날 매수·매도별 합계로 수수료 정산
+        fee_b = day_fee(gross_day["buy"], "buy", fee, sec)
+        fee_s = day_fee(gross_day["sell"], "sell", fee, sec)
+        st.cash -= fee_b + fee_s
+        realized -= fee_b + fee_s
 
         # 4) T 갱신
         if o.kind == "FIRST":
@@ -334,7 +354,7 @@ def run(cfg: Config, bars: list[Bar], keep_daily: bool = True) -> Result:
     wins = [c for c in cycles if c["profit"] > 0]
     stats = {
         "ticker": cfg.ticker.upper(), "n": cfg.n, "target": tgt, "compound": cfg.compound,
-        "fee_rate": fee, "start": first_date, "end": last.date, "years": round(years, 3),
+        "fee_rate": fee, "sec_rate": sec, "start": first_date, "end": last.date, "years": round(years, 3),
         "principal": cfg.principal, "final_equity": round(final_eq, 2),
         "total_return_pct": round((final_eq / cfg.principal - 1) * 100, 2),
         "cagr_pct": round(((final_eq / cfg.principal) ** (1 / years) - 1) * 100, 2) if final_eq > 0 else -100.0,

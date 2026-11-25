@@ -17,7 +17,7 @@ EDGE = r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
 CASES = [
     dict(ticker="TQQQ", n=20, target=None, start="2011-01-03", compound=True, fee=0.0),
     dict(ticker="TQQQ", n=40, target=10, start="2015-06-01", compound=True, fee=0.0),
-    dict(ticker="TQQQ", n=30, target=25, start="2019-01-02", end="2023-06-30", compound=False, fee=0.0007),
+    dict(ticker="TQQQ", n=30, target=25, start="2019-01-02", end="2023-06-30", compound=False, fee=0.0007, sec=0.0000206),
     dict(ticker="SOXL", n=20, target=None, start="2011-01-03", compound=True, fee=0.0),
     dict(ticker="SOXL", n=40, target=15, start="2020-02-03", compound=False, fee=0.0),
     dict(ticker="SOXL", n=30, target=20, start="2014-03-03", end="2021-12-31", compound=True, fee=0.001),
@@ -26,7 +26,7 @@ CASES = [
 
 def py_result(c):
     cfg = Config(ticker=c["ticker"], n=c["n"], target=c["target"], principal=20000, start=c["start"],
-                 end=c.get("end"), compound=c["compound"], fee_rate=c["fee"])
+                 end=c.get("end"), compound=c["compound"], fee_rate=c["fee"], sec_rate=c.get("sec", 0.0))
     r = run(cfg, data.load(c["ticker"]))
     return {"final": round(r.stats["final_equity"], 2), "mdd": round(r.stats["mdd_pct"], 2),
             "cycles": r.stats["cycles"], "rev": r.stats["reverse_entries"], "blocked": r.stats["blocked_exits"],
@@ -37,7 +37,7 @@ def main():
     csv = {t: (ROOT / "data" / f"{t}.csv").read_text(encoding="utf-8") for t in ("TQQQ", "SOXL")}
     engine = (ROOT / "app" / "engine.js").read_text(encoding="utf-8")
     js_cases = [{"ticker": c["ticker"], "n": c["n"], "target": c["target"], "principal": 20000, "start": c["start"],
-                 "end": c.get("end"), "compound": c["compound"], "feeRate": c["fee"]} for c in CASES]
+                 "end": c.get("end"), "compound": c["compound"], "feeRate": c["fee"], "secRate": c.get("sec", 0.0)} for c in CASES]
     page = f"""<!doctype html><meta charset="utf-8"><pre id="out">pending</pre>
 <script>{engine}</script>
 <script>

@@ -8,13 +8,13 @@
   try {
     const cases = [
       { ticker: 'TQQQ', n: 20, target: null, principal: 20000, start: '2015-01-02', end: '2018-06-30', feeRate: 0 },
-      { ticker: 'SOXL', n: 40, target: null, principal: 50000, start: '2020-01-02', end: '2023-06-30', feeRate: 0 },
-      { ticker: 'TQQQ', n: 30, target: 12, principal: 30000, start: '2021-06-01', end: '2024-12-31', feeRate: 0 },
+      { ticker: 'SOXL', n: 40, target: null, principal: 50000, start: '2020-01-02', end: '2023-06-30', feeRate: 0.001, secRate: 0.0000206 },
+      { ticker: 'TQQQ', n: 30, target: 12, principal: 30000, start: '2021-06-01', end: '2024-12-31', feeRate: 0.0007, secRate: 0.0000206 },
     ];
     for (const c of cases) {
       const bars = E.parseCSV(await (await fetch(`app/data/${c.ticker}.csv`)).text());
       const r = E.run(c, bars);
-      const tr = { ticker: c.ticker, n: c.n, target: c.target, feeRate: c.feeRate * 100,
+      const tr = { ticker: c.ticker, n: c.n, target: c.target, feeRate: c.feeRate * 100, secRate: (c.secRate || 0) * 100,
         start: { begin: r.daily[0].date, cash: c.principal, shares: 0, avg: 0, T: 0, mode: 'NORMAL' }, records: [] };
       const barMap = new Map(bars.map((b) => [b.date, b]));
       // 하루씩: 현재 상태에서 주문을 만들고 자동 판정 체결을 기록으로 추가
@@ -24,7 +24,7 @@
         const d = r.daily[i], b = barMap.get(d.date);
         const st = rp.nextState;
         const o = rp.nextOrders;
-        const fills = TK.autoJudge(o, st, b.close, b.high, c.feeRate);
+        const fills = TK.autoJudge(o, st, b.close, b.high, c.feeRate || 0);
         tr.records.push({ date: d.date, close: b.close, fills });
         const nx = r.daily[i + 1] ? r.daily[i + 1].date : d.date; rp = TK.replay(tr, bars.filter((x) => x.date <= nx));
         const a = rp.state;

@@ -29,12 +29,7 @@
 
   // 증권사 방식 수수료: 그날 매수(또는 매도) 체결금액 합계에 수수료율을 곱해 센트 미만 버림,
   // 매도는 제세금(SEC fee 등)을 따로 곱해 센트 미만 올림. 평단에는 넣지 않고 잔금(정산금액)에만 반영한다.
-  function dayFee(gross, side, rate, sec) {
-    if (!(gross > 0)) return 0;
-    const base = Math.floor(gross * rate * 100 + 1e-7) / 100;
-    const tax = side === 'sell' && sec > 0 ? Math.ceil(gross * sec * 100 - 1e-7) / 100 : 0;
-    return Math.round((base + tax) * 100) / 100;
-  }
+  const dayFee = E.dayFee;
 
   // 그날 주문(o)에 대해 기록 입력 칸 목록을 만든다
   function orderRows(o) {
@@ -100,7 +95,7 @@
     }
     // 잔금보다 많이 살 수는 없다(뒤쪽 주문부터 줄인다)
     let cash = st.cash;
-    for (const f of fills) cash += f.qty * f.price * (1 - feeRate);
+    for (const f of fills) cash += f.qty * f.price; // 엔진과 같이: 매도 대금은 수수료 정산 전 금액으로 매수 한도 계산
     let room = Math.floor(cash / (C * (1 + feeRate)));
     const out = [];
     for (const b of buys) { const q = Math.max(0, Math.min(b.qty, room)); room -= q; if (q > 0) out.push(Object.assign({}, b, { qty: q })); }

@@ -23,6 +23,13 @@
     return DEFAULT_TARGET[String(cfg.ticker).toUpperCase()] ?? 15;
   }
   function starPct(cfg, T) { const t = targetPct(cfg); return t - t / (cfg.n / 2) * T; }
+  // 증권사 정산 방식 수수료: 합계 × 수수료율 센트 미만 버림 + (매도) 합계 × 제세금율 센트 미만 올림
+  function dayFee(gross, side, rate, sec) {
+    if (!(gross > 0)) return 0;
+    const baseC = Math.floor(gross * rate * 100 + 1e-7);
+    const taxC = side === 'sell' && sec > 0 ? Math.ceil(gross * sec * 100 - 1e-7) : 0;
+    return (baseC + taxC) / 100;
+  }
   function rnd(x, tick) { return tick > 0 ? Math.round(x * 100) / 100 : Math.round(x * 10000) / 10000; }
 
   function makeOrders(st, cfg, tick, sma5, capital) {
@@ -82,8 +89,9 @@
 
   function run(cfgIn, bars) {
     const cfg = Object.assign({ ticker: 'TQQQ', n: 20, target: null, principal: 20000, start: null, end: null,
-      compound: true, feeRate: 0, tick: 0.01, tickExemptBelow: 2.0 }, cfgIn);
-    const n = cfg.n, tgt = targetPct(cfg), fee = cfg.feeRate;
+      compound: true, feeRate: 0, secRate: 0, tick: 0.01, tickExemptBelow: 2.0 }, cfgIn);
+    const n = cfg.n, tgt = targetPct(cfg), fee = cfg.feeRate, sec = cfg.secRate;
+    let gB = 0, gS = 0; // 그날 매수·매도 체결금액 합계
     let iStart = -1, iEnd = -1;
     for (let i = 0; i < bars.length; i++) {
       const d = bars[i].date;
@@ -104,13 +112,15 @@
       const cost = q * price;
       st.avg = (st.avg * st.shares + cost) / (st.shares + q);
       st.shares += q;
-      st.cash -= cost * (1 + fee);
+      st.cash -= cost; // 수수료는 그날 합계로 따로 뺀다
+      gB += cost;
     }
     function sell(q, price) {
       q = Math.min(q, st.shares);
       const gross = q * price;
-      st.cash += gross * (1 - fee);
-      const pnl = q * (price - st.avg) - gross * fee;
+      st.cash += gross;
+      gS += gross;
+      const pnl = q * (price - st.avg);
       st.shares -= q;
       if (st.shares === 0) st.avg = 0;
       return pnl;
@@ -136,6 +146,7 @@
       const events = [], fills = [];
       const avgBefore = st.avg, sharesBefore = st.shares, cashBefore = st.cash;
       let realized = 0, soldLimit = false, soldLoc = false, soldMoc = false;
+      gB = 0; gS = 0;
 
       if (o.limitSell && o.limitSell[1] > 0 && b.high >= o.limitSell[0]) {
         const [p, q] = o.limitSell;
@@ -170,6 +181,10 @@
           fills.push({ side: 'buy', type: 'LOC', label: lab, qty: bought, price: C, pnl: 0 });
         }
       }
+      // 그날 매수·매도별 합계로 수수료 정산(평단 제외, 잔금·실현손익에 반영)
+      const feeBuy = dayFee(gB, 'buy', fee, sec), feeSell = dayFee(gS, 'sell', fee, sec);
+      st.cash -= feeBuy + feeSell;
+      realized -= feeBuy + feeSell;
 
       if (o.kind === 'FIRST') {
         if (bought > 0) {
@@ -226,7 +241,7 @@
       }
       daily.push({ date: b.date, close: C, kind: o.kind, mode: st.mode, modeBefore, T: st.T, Tbefore, starPct: o.starPct ?? null,
         star: o.star ?? null, amt: o.amt, shares: st.shares, avg: st.avg, cash: st.cash, withdrawn, equity, dd, realized,
-        events, cycleEnd: endedCycle, fills, orders: o, high: b.high, low: b.low, open: b.open,
+        events, cycleEnd: endedCycle, fills, feeBuy, feeSell, orders: o, high: b.high, low: b.low, open: b.open,
         avgBefore, sharesBefore, cashBefore, limitPrice: o.limitSell ? o.limitSell[0] : null });
     }
 
@@ -248,5 +263,5 @@
     return { cfg, stats, cycles, daily, nextOrders, state: Object.assign({}, st) };
   }
 
-  root.MubaeEngine = { DEFAULT_TARGET, parseCSV, targetPct, starPct, makeOrders, orderLines, run };
+  root.MubaeEngine = { DEFAULT_TARGET, dayFee, parseCSV, targetPct, starPct, makeOrders, orderLines, run };
 })(typeof window !== 'undefined' ? window : globalThis);

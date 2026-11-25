@@ -193,9 +193,15 @@ table.daytbl .fillbox .s { font-family: var(--font-ui); }
         </div>
         <small>단리는 원금을 넘는 수익을 인출해 따로 둡니다(평가금에는 포함).</small>
       </div>
-      <label class="field"><span>수수료 % (편도)</span>
-        <input class="num" id="f-fee" type="number" min="0" max="2" step="0.01" value="0" inputmode="decimal">
-      </label>
+      <div class="row2">
+        <label class="field"><span>수수료율 %</span>
+          <input class="num" id="f-fee" type="number" min="0" max="2" step="any" value="0" inputmode="decimal">
+        </label>
+        <label class="field"><span>매도 제세금 %</span>
+          <input class="num" id="f-sec" type="number" min="0" max="1" step="any" value="0" inputmode="decimal">
+        </label>
+      </div>
+      <small class="muted" style="font-size:11.5px;margin-top:-8px">그날 매수·매도별 체결금액 합계에 적용(수수료 센트 미만 버림, 제세금 올림). 평단에는 넣지 않고 잔금에만 반영. 예: 0.07 / 0.00206</small>
       <p class="msg" id="msg" hidden></p>
       <button class="btn" type="submit">백테스트 실행</button>
       <p class="datainfo" id="datainfo">가격 데이터를 불러오는 중…</p>
@@ -313,7 +319,7 @@ table.daytbl .fillbox .s { font-family: var(--font-ui); }
       <p class="hint">굵은 값은 그날 매매를 마친 뒤의 값이고, 아래 작은 글씨는 전날 대비 변화와 보조 정보입니다. 행을 누르면 그날 걸었던 주문표(전날 장 마감 기준)를 펼쳐 봅니다.</p>
       <div class="tablewrap tall">
         <table class="daytbl">
-          <thead><tr><th class="l">날짜</th><th>종가</th><th class="l">모드</th><th>T</th><th>별지점</th><th class="l">체결</th><th>실현손익</th><th>보유(주)</th><th>평단</th><th>잔금</th><th>누적 실현손익</th></tr></thead>
+          <thead><tr><th class="l">날짜</th><th>종가</th><th class="l">모드</th><th>T</th><th>별지점</th><th class="l">체결</th><th>실현손익(세후)</th><th>보유(주)</th><th>평단</th><th>잔금</th><th>누적 실현손익</th></tr></thead>
           <tbody id="cd-body"></tbody>
         </table>
       </div>
@@ -368,7 +374,7 @@ table.daytbl .fillbox .s { font-family: var(--font-ui); }
     return {
       ticker: $('f-ticker').value, n: Number($('f-n').value), target: $('f-target').value === '' ? null : Number($('f-target').value),
       start: $('f-start').value || null, end: $('f-end').value || null, principal: Number($('f-principal').value),
-      compound: document.querySelector('input[name="f-comp"]:checked').value === '1', feeRate: Number($('f-fee').value || 0) / 100,
+      compound: document.querySelector('input[name="f-comp"]:checked').value === '1', feeRate: Number($('f-fee').value || 0) / 100, secRate: Number($('f-sec').value || 0) / 100,
     };
   }
   function saveForm(c) { try { localStorage.setItem(STORE_KEY, JSON.stringify(c)); } catch (e) {} }
@@ -383,7 +389,8 @@ table.daytbl .fillbox .s { font-family: var(--font-ui); }
     $('f-end').value = c.end || '';
     if (c.principal) $('f-principal').value = c.principal;
     $(c.compound === false ? 'f-comp-0' : 'f-comp-1').checked = true;
-    if (c.feeRate != null) $('f-fee').value = +(c.feeRate * 100).toFixed(4);
+    if (c.feeRate != null) $('f-fee').value = +(c.feeRate * 100).toFixed(6);
+    if (c.secRate != null) $('f-sec').value = +(c.secRate * 100).toFixed(6);
   }
   function showMsg(t) { $('msg').textContent = t || ''; $('msg').hidden = !t; }
 
@@ -423,7 +430,7 @@ table.daytbl .fillbox .s { font-family: var(--font-ui); }
     if (!(c.n >= 4)) return showMsg('분할수는 4 이상으로 입력하세요.');
     if (c.target != null && !(c.target > 0)) return showMsg('목표수익률은 0보다 큰 값으로 입력하세요.');
     if (!(c.principal >= 100)) return showMsg('원금은 $100 이상으로 입력하세요.');
-    if (!(c.feeRate >= 0)) return showMsg('수수료는 0 이상으로 입력하세요.');
+    if (!(c.feeRate >= 0) || !(c.secRate >= 0)) return showMsg('수수료율과 제세금은 0 이상으로 입력하세요.');
     if (c.start && c.start > last) return showMsg(`시작일이 데이터 마지막 날(${last})보다 늦습니다.`);
     if (c.start && c.end && c.end < c.start) return showMsg('종료일이 시작일보다 빠릅니다.');
     let r;
@@ -471,7 +478,7 @@ table.daytbl .fillbox .s { font-family: var(--font-ui); }
   // ---------- 요약 ----------
   function renderSummary() {
     const r = S.result, s = r.stats;
-    $('run-title').textContent = `${s.ticker} · ${s.n}분할 · 목표 ${s.target}% · 원금 ${fmtMoney(s.principal)} · ${s.compound ? '복리' : '단리'}${r.cfg.feeRate ? ` · 수수료 ${(r.cfg.feeRate * 100).toFixed(2)}%` : ''}`;
+    $('run-title').textContent = `${s.ticker} · ${s.n}분할 · 목표 ${s.target}% · 원금 ${fmtMoney(s.principal)} · ${s.compound ? '복리' : '단리'}${r.cfg.feeRate || r.cfg.secRate ? ` · 수수료 ${+(r.cfg.feeRate * 100).toFixed(4)}%${r.cfg.secRate ? ` + 매도 제세금 ${+(r.cfg.secRate * 100).toFixed(6)}%` : ''}` : ''}`;
     $('run-period').textContent = `${s.start} ~ ${s.end} · ${s.years.toFixed(2)}년 · ${r.daily.length.toLocaleString()}거래일`;
     $('k-final').textContent = fmtMoney(s.finalEquity);
     $('k-final').className = 'v ' + cls(s.finalEquity - s.principal);
@@ -906,7 +913,8 @@ table.daytbl .fillbox .s { font-family: var(--font-ui); }
     $('cd-title').textContent = `${it.open ? '진행 중 사이클' : `사이클 #${it.key + 1}`} · ${c.start} ~ ${it.open ? lastD.date + ' (진행 중)' : c.end}`;
     let nb = 0, ns = 0, qb = 0, qs = 0, pnl = 0, revDays = 0;
     for (const d of days) {
-      for (const f of d.fills) { if (f.side === 'buy') { nb++; qb += f.qty; } else { ns++; qs += f.qty; pnl += f.pnl; } }
+      for (const f of d.fills) { if (f.side === 'buy') { nb++; qb += f.qty; } else { ns++; qs += f.qty; } }
+      pnl += d.realized; // 세후(그날 수수료 차감)
       if (d.modeBefore === 'REVERSE') revDays++;
     }
     const sb = $('cd-stats');
@@ -1059,7 +1067,7 @@ table.daytbl .fillbox .s { font-family: var(--font-ui); }
     days.forEach((d, i) => {
       const hasFill = d.fills.length > 0;
       const pc = i > 0 ? days[i - 1].close : prevClose;
-      cumRz += d.fills.reduce((a, f) => a + f.pnl, 0);
+      cumRz += d.realized;
       if (S.view.cdOnly && !hasFill && !d.cycleEnd) return;
       const tr = tb.insertRow();
       tr.className = 'click';
@@ -1109,8 +1117,8 @@ table.daytbl .fillbox .s { font-family: var(--font-ui); }
       }
 
       const sold = d.fills.some((f) => f.side === 'sell');
-      const rz = d.fills.reduce((a, f) => a + f.pnl, 0);
-      cell2(tr, sold ? fmtMoney2(rz) : '—', '', '', sold ? cls(rz) : 'muted');
+      const rz = d.realized, fee = (d.feeBuy || 0) + (d.feeSell || 0), showR = sold || fee > 0;
+      cell2(tr, showR ? fmtMoney2(rz) : '—', fee > 0 ? `수수료 ${fmtMoney2(fee)}` : '', '', showR ? cls(rz) : 'muted');
 
       const dq = d.shares - d.sharesBefore;
       cell2(tr, d.shares.toLocaleString(), dq ? signed(dq, 0) + '주' : '', '', '', dq > 0 ? 'up' : dq < 0 ? 'down' : '');
