@@ -160,6 +160,19 @@ details[open] > summary { margin-bottom: 10px; }
   table.fills td.role { min-width: 130px; }
   th, td { padding: 6px 7px; }
   .formrow .field { width: calc(50% - 5px); }
+  /* 요약: 두 칸씩 촘촘히 놓아 무매 진행·내 계좌가 한 화면에 들어오게 */
+  .kgroups { gap: 10px; }
+  .kgrp-h { margin-bottom: 4px; font-size: 12px; }
+  .kpis { display: grid; grid-template-columns: 1fr 1fr; }
+  .kpi { padding: 8px 11px; gap: 1px; }
+  .kpi.wide { grid-column: 1 / -1; }
+  .kpi .k { font-size: 11px; }
+  .kpi .v { font-size: 17px; }
+  .kpi .s { font-size: 10.5px; line-height: 1.35; }
+  .kpi.tcard { display: grid; grid-template-columns: auto auto 1fr; align-items: center; column-gap: 10px; row-gap: 3px; }
+  .kpi.tcard .k { grid-column: 1 / -1; }
+  .kpi.tcard .tbar { margin-top: 0; }
+  .kpi.tcard .s { grid-column: 1 / -1; }
 }
 </style>
 </head>
@@ -584,6 +597,8 @@ details[open] > summary { margin-bottom: 10px; }
     let el = group('무매 진행');
     const d = kpi(el, '모드 · T', holding ? fmtT(st.T) : '대기', null);
     if (holding) d.querySelector('.v').title = `T 원래 값: ${st.T}`;
+    d.classList.add('wide', 'tcard'); // 좁은 화면에서는 한 줄 전체
+
     const chip = document.createElement('span');
     chip.className = 'chip ' + (!holding ? 'idle' : st.mode === 'REVERSE' ? 'reverse' : 'normal');
     chip.textContent = !holding ? '첫 매수 대기' : st.mode === 'REVERSE' ? (st.revFirst ? '리버스 · 1일차' : '리버스') : st.T < n / 2 ? '일반 · 전반전' : '일반 · 후반전';
@@ -625,7 +640,7 @@ details[open] > summary { margin-bottom: 10px; }
       const upnl = holding ? st.shares * (mc - st.avg) : 0;
       kpi(el, `평가금`, fmtMoney(st.cash + st.shares * mc), holding ? `평가손익 ${signedMoney(upnl)}` : '잔금만 보유', '');
     } else kpi(el, '평가금', '—', '가격 데이터 없음');
-    kpi(el, '누적 실현손익', fmtMoney2(rp.cumRealized), `완료 사이클 ${rp.cycles.length}회`, cls(rp.cumRealized));
+    kpi(el, '누적 실현손익', fmtMoney2(rp.cumRealized), `완료 사이클 ${rp.cycles.length}회`, cls(rp.cumRealized)).classList.add('wide');
   }
 
   function renderWarn(tr, rp) {
