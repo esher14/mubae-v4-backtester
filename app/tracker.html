@@ -561,15 +561,20 @@ details[open] > summary { margin-bottom: 10px; }
     const mk2 = document.createElement('b'); mk2.style.left = ((n - 1) / n * 100) + '%';
     bar.append(fillI, mk1, mk2); d.append(bar);
     const s1 = document.createElement('div'); s1.className = 's'; s1.textContent = `${n}분할 · 후반전 ${n / 2} · 소진 ${n - 1}`; d.append(s1);
-    // 보유
-    kpi(el, '보유 · 평단', holding ? `${st.shares.toLocaleString()}주` : '0주', holding ? `평단 ${fmtAvg(st.avg)}` : '—');
+    // 평단·종가
+    const mc = rp.markClose;
+    const pa = kpi(el, '평단', holding ? fmtAvg(st.avg) : '—', `보유 ${st.shares.toLocaleString()}주${holding ? ` · 매입금 ${fmtMoney2(st.shares * st.avg)}` : ''}`);
+    if (holding) pa.querySelector('.v').title = `평단 원래 값: ${st.avg}`;
+    if (mc) {
+      const vsAvg = holding ? (mc / st.avg - 1) * 100 : null;
+      kpi(el, `${tr.ticker} 종가 (${rp.markDate})`, fmtMoney2(mc), vsAvg == null ? '보유 없음' : `평단 대비 ${fmtPct(vsAvg)}`, '');
+    } else kpi(el, `${tr.ticker} 종가`, '—', '가격 데이터 없음');
     kpi(el, '잔금', fmtMoney2(st.cash), holding && st.mode === 'NORMAL' ? `1회 매수금 ${fmtMoney2(st.cash / Math.max(n - st.T, 1e-9))}` : !holding ? `첫 매수 ${fmtMoney2(st.cash / n)}` : `리버스 1회 ${fmtMoney2(st.cash / 4)}`);
     // 평가
-    const mc = rp.markClose;
     if (mc) {
       const eq = st.cash + st.shares * mc;
-      const pnl = holding ? (mc / st.avg - 1) * 100 : 0;
-      kpi(el, `평가금 (${rp.markDate} 종가)`, fmtMoney(eq), holding ? `${tr.ticker} ${fmtMoney2(mc)} · 평가손익 ${fmtPct(pnl)}` : `${tr.ticker} ${fmtMoney2(mc)}`, '');
+      const upnl = holding ? st.shares * (mc - st.avg) : 0;
+      kpi(el, `평가금 (${rp.markDate} 종가)`, fmtMoney(eq), holding ? `평가손익 ${signedMoney(upnl)} (${fmtPct((mc / st.avg - 1) * 100)})` : '잔금만 보유', '');
     } else kpi(el, '평가금', '—', '가격 데이터 없음');
     // 사이클
     const oc = rp.openCycle;
