@@ -357,14 +357,14 @@ details[open] > summary { margin-bottom: 10px; }
   const E = window.MubaeEngine, TK = window.MubaeTracker, R = TK.ROLES;
   const $ = (id) => document.getElementById(id);
   const KEY = 'mubae-tracker-v1', UI_KEY = 'mubae-tracker-ui-v1';
-  const fmtMoney = (v) => (v < 0 ? '-$' : '$') + d3.format(',.0f')(Math.abs(v));
+  const fmtMoney = (v) => (v < 0 ? '-$' : '$') + d3.format(',.2f')(Math.abs(v)); // 기록장 금액은 모두 센트까지 표시
   const fmtMoney2 = (v) => (v < 0 ? '-$' : '$') + d3.format(',.2f')(Math.abs(v));
   const fmtPct = (v, d = 2) => (v > 0 ? '+' : '') + v.toFixed(d) + '%';
   const fmtT = (t) => String(+(+t).toFixed(4)); // 화면 표시는 4자리까지. 계산·저장은 원래 값 그대로
   const signedT = (v) => (v > 0 ? '+' : v < 0 ? '−' : '±') + fmtT(Math.abs(v));
   const cls = (v) => (v > 0 ? 'up' : v < 0 ? 'down' : '');
   const signed = (v, d = 2) => (v > 0 ? '+' : v < 0 ? '−' : '±') + Math.abs(v).toFixed(d);
-  const signedMoney = (v) => (v > 0 ? '+$' : v < 0 ? '−$' : '±$') + d3.format(',.0f')(Math.abs(v));
+  const signedMoney = (v) => (v > 0 ? '+$' : v < 0 ? '−$' : '±$') + d3.format(',.2f')(Math.abs(v));
   const parseDate = d3.utcParse('%Y-%m-%d');
   const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
@@ -821,7 +821,7 @@ details[open] > summary { margin-bottom: 10px; }
       const dA = a.shares && b.avg ? a.avg - b.avg : 0;
       cell2(row, a.shares ? fmtMoney2(a.avg) : '—', a.shares && Math.abs(dA) >= 0.005 ? signed(dA) : '', '', a.shares ? '' : 'muted');
       const dc = a.cash - b.cash;
-      cell2(row, fmtMoney(a.cash), Math.abs(dc) >= 0.5 ? signedMoney(dc) : '');
+      cell2(row, fmtMoney(a.cash), Math.abs(dc) >= 0.005 ? signedMoney(dc) : '');
       const sold = d.fills.some((f) => R[f.role].side === 'sell');
       const fee = (d.feeBuy || 0) + (d.feeSell || 0);
       const showR = sold || fee > 0;
