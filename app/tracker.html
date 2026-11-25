@@ -359,6 +359,7 @@ details[open] > summary { margin-bottom: 10px; }
   const KEY = 'mubae-tracker-v1', UI_KEY = 'mubae-tracker-ui-v1';
   const fmtMoney = (v) => (v < 0 ? '-$' : '$') + d3.format(',.2f')(Math.abs(v)); // 기록장 금액은 모두 센트까지 표시
   const fmtMoney2 = (v) => (v < 0 ? '-$' : '$') + d3.format(',.2f')(Math.abs(v));
+  const fmtAvg = (v) => '$' + d3.format(',.4f')(v); // 평단 화면 표시는 4자리. 계산·저장은 원래 값 그대로
   const fmtPct = (v, d = 2) => (v > 0 ? '+' : '') + v.toFixed(d) + '%';
   const fmtT = (t) => String(+(+t).toFixed(4)); // 화면 표시는 4자리까지. 계산·저장은 원래 값 그대로
   const signedT = (v) => (v > 0 ? '+' : v < 0 ? '−' : '±') + fmtT(Math.abs(v));
@@ -561,7 +562,7 @@ details[open] > summary { margin-bottom: 10px; }
     bar.append(fillI, mk1, mk2); d.append(bar);
     const s1 = document.createElement('div'); s1.className = 's'; s1.textContent = `${n}분할 · 후반전 ${n / 2} · 소진 ${n - 1}`; d.append(s1);
     // 보유
-    kpi(el, '보유 · 평단', holding ? `${st.shares.toLocaleString()}주` : '0주', holding ? `평단 ${fmtMoney2(st.avg)}` : '—');
+    kpi(el, '보유 · 평단', holding ? `${st.shares.toLocaleString()}주` : '0주', holding ? `평단 ${fmtAvg(st.avg)}` : '—');
     kpi(el, '잔금', fmtMoney2(st.cash), holding && st.mode === 'NORMAL' ? `1회 매수금 ${fmtMoney2(st.cash / Math.max(n - st.T, 1e-9))}` : !holding ? `첫 매수 ${fmtMoney2(st.cash / n)}` : `리버스 1회 ${fmtMoney2(st.cash / 4)}`);
     // 평가
     const mc = rp.markClose;
@@ -819,7 +820,7 @@ details[open] > summary { margin-bottom: 10px; }
       const dq = a.shares - b.shares;
       cell2(row, a.shares.toLocaleString(), dq ? signed(dq, 0) + '주' : '', '', '', dq > 0 ? 'up' : dq < 0 ? 'down' : '');
       const dA = a.shares && b.avg ? a.avg - b.avg : 0;
-      cell2(row, a.shares ? fmtMoney2(a.avg) : '—', a.shares && Math.abs(dA) >= 0.005 ? signed(dA) : '', '', a.shares ? '' : 'muted');
+      cell2(row, a.shares ? fmtAvg(a.avg) : '—', a.shares && Math.abs(dA) >= 0.00005 ? signed(dA, 4) : '', '', a.shares ? '' : 'muted');
       const dc = a.cash - b.cash;
       cell2(row, fmtMoney(a.cash), Math.abs(dc) >= 0.005 ? signedMoney(dc) : '');
       const sold = d.fills.some((f) => R[f.role].side === 'sell');
@@ -1009,7 +1010,7 @@ details[open] > summary { margin-bottom: 10px; }
         cur.attr('x1', px).attr('x2', px).attr('visibility', 'visible');
         tip.selectAll('*').remove();
         tip.append('div').attr('class', 'd').text(`${d.date} · ${i + 1}일째`);
-        const rows = [['종가', fmtMoney2(d.close)], ['평단(매매 후)', d.after.avg > 0 ? fmtMoney2(d.after.avg) : '—'], [d.before.mode === 'REVERSE' ? '별지점(5일 평균)' : '별지점', star(d) ? fmtMoney2(star(d)) : '—'],
+        const rows = [['종가', fmtMoney2(d.close)], ['평단(매매 후)', d.after.avg > 0 ? fmtAvg(d.after.avg) : '—'], [d.before.mode === 'REVERSE' ? '별지점(5일 평균)' : '별지점', star(d) ? fmtMoney2(star(d)) : '—'],
           ['T', `${fmtT(d.before.T)} → ${fmtT(d.after.T)}`], ['보유', `${d.before.shares.toLocaleString()} → ${d.after.shares.toLocaleString()}주`], ['평가금', d.equity != null ? fmtMoney(d.equity) : '—']];
         for (const [k, v] of rows) { const rr = tip.append('div').attr('class', 'r'); rr.append('span').text(k); rr.append('b').text(v); }
         const ev2 = d.fills.map((f) => `${R[f.role].side === 'buy' ? '매수' : '매도'} ${f.qty}주 @${f.price.toFixed(2)} (${R[f.role].label})`).concat(d.events);
@@ -1061,7 +1062,7 @@ details[open] > summary { margin-bottom: 10px; }
     $('c-T-wrap').hidden = s.kind !== 'mid';
     $('c-T').value = s.kind === 'mid' ? s.T : '';
     $('c-info').textContent = s.kind === 'mid'
-      ? `중간 진입 · ${s.asOf} 장 마감 기준 잔금 ${fmtMoney2(s.cash)}, ${s.shares}주 @${fmtMoney2(s.avg)}, T ${fmtT(s.T)}, ${s.mode === 'REVERSE' ? '리버스' : '일반'} 모드`
+      ? `중간 진입 · ${s.asOf} 장 마감 기준 잔금 ${fmtMoney2(s.cash)}, ${s.shares}주 @${fmtAvg(s.avg)}, T ${fmtT(s.T)}, ${s.mode === 'REVERSE' ? '리버스' : '일반'} 모드`
       : `새로 시작 · 원금 ${fmtMoney2(s.cash)}, 첫 매수일 ${s.begin}`;
   }
   $('c-save').addEventListener('click', () => {
