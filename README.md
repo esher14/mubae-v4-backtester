@@ -18,7 +18,7 @@
 - `app/tracker-core.js`: 기록장 계산부. 주문은 `engine.js`의 `makeOrders`를 그대로 쓰고, 기록한 체결로 상태를 다시 계산합니다.
   엔진이 가정한 체결을 그대로 기록하면 엔진과 같은 결과가 나오는지 `test_tracker.html`로 검증합니다(저장소 루트에서 `python -m http.server` 후 브라우저로 열기).
 - `app/engine.js`: 백테스트 엔진(브라우저용). `mubae/engine.py`와 같은 결과를 내는지 `python test_js_engine.py`로 검증합니다.
-- `app/data/*.csv`: 가격 데이터. GitHub Actions(`.github/workflows/update-and-deploy.yml`)가 평일 매일 오전 8시 17분(한국시간)에
+- `app/data/*.csv`: 가격 데이터. GitHub Actions(`.github/workflows/update-and-deploy.yml`)가 평일 매일 오전 6시 40분과 8시 17분(한국시간, 두 번째는 다시 받아 확정값으로 덮어쓰기)에
   `scripts/fetch_prices.py`로 Yahoo Finance 일봉을 받아 새로 만들고 GitHub Pages에 배포합니다.
   저장소에 커밋된 CSV는 받기에 실패했을 때 쓰는 비상용 사본입니다.
 

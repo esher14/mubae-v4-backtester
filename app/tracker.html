@@ -703,7 +703,7 @@ details[open] > summary { margin-bottom: 10px; }
     $('r-fee-sell').value = rec && rec.feeSell != null ? rec.feeSell : '';
     $('r-msg').textContent = '';
     const lastRec = tr.records.length ? tr.records.map((r) => r.date).sort().slice(-1)[0] : null;
-    $('r-src').textContent = (bar ? `${date} 종가·고가는 가격 데이터에서 채웠습니다.` : `${date} 가격 데이터가 아직 없습니다(평일 아침 8시 무렵 갱신). 종가를 직접 넣어 주세요.`)
+    $('r-src').textContent = (bar ? `${date} 종가·고가는 가격 데이터에서 채웠습니다.` : `${date} 가격 데이터가 아직 없습니다(평일 아침 7시 무렵 갱신, 늦으면 9시 무렵). 종가를 직접 넣어 주세요.`)
       + (!rec && lastRec && date < lastRec ? ' 이 날짜 이후에 기록이 있어, 저장하면 이후 계산이 모두 다시 됩니다.' : '');
     const at = ordersAt(tr, date, +$('r-close').value);
     if (!at) { $('r-rows').replaceChildren(); S.form = null; return; }
