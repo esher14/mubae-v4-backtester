@@ -61,6 +61,11 @@ input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px s
 .btn { font: inherit; font-weight: 600; background: var(--accent); color: var(--panel); border: 0; border-radius: 7px; padding: 9px 12px; cursor: pointer; }
 .msg { font-size: 12.5px; color: var(--up); margin: 0; }
 .datainfo { font-size: 11.5px; color: var(--muted); margin: 0; }
+.golink { display: flex; flex-direction: column; gap: 2px; padding: 9px 12px; border: 1px solid var(--accent); border-radius: 8px; background: var(--accent-soft); color: var(--accent); text-decoration: none; }
+.golink b { font-size: 13.5px; }
+.golink span { font-size: 11.5px; color: var(--muted); }
+.golink:hover { filter: brightness(0.97); }
+.golink:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
 /* 결과 */
 .main { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
@@ -168,6 +173,7 @@ table.daytbl .fillbox .s { font-family: var(--font-ui); }
         </div>
         <p class="muted" style="font-size:12.5px">라오어 무한매수법 V4.0 규칙으로 일봉 백테스트를 돌립니다. 값을 바꾸면 바로 다시 계산됩니다.</p>
       </div>
+      <a class="golink" href="tracker.html"><b>실제 매매 기록장 →</b><span>내 체결을 기록하고 다음 거래일 주문표 받기</span></a>
       <label class="field"><span>종목</span>
         <select id="f-ticker"><option value="TQQQ">TQQQ</option><option value="SOXL">SOXL</option></select>
       </label>
@@ -210,7 +216,6 @@ table.daytbl .fillbox .s { font-family: var(--font-ui); }
       <button class="btn" type="submit">백테스트 실행</button>
       <p class="datainfo" id="datainfo">가격 데이터를 불러오는 중…</p>
       <p class="datainfo" id="liveinfo" hidden></p>
-      <p class="datainfo"><a href="tracker.html">실제 매매 기록장 →</a> 내 체결을 기록하고 다음 거래일 주문표 받기</p>
     </form>
   </aside>
 
